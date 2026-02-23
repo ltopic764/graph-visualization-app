@@ -1,0 +1,72 @@
+{% extends "explorer/base.html" %}
+
+{% block content %}
+<div id="graph-explorer-layout" class="app-shell">
+    <header id="top-toolbar" class="toolbar">
+        <section id="file-input-area" class="toolbar-group">
+            <h2 class="group-title">File Input</h2>
+            <button type="button" class="placeholder-button">Select File</button>
+            <span class="placeholder-text">No file selected</span>
+        </section>
+
+        <section id="search-area" class="toolbar-group">
+            <h2 class="group-title">Search</h2>
+            <input type="text" placeholder="Search nodes or edges" aria-label="Search placeholder">
+        </section>
+
+        <section id="filter-area" class="toolbar-group">
+            <h2 class="group-title">Filters</h2>
+            <input type="text" placeholder="Filter key" aria-label="Filter key placeholder">
+            <select aria-label="Filter operator placeholder">
+                <option>==</option>
+                <option>!=</option>
+                <option>&gt;</option>
+                <option>&gt;=</option>
+                <option>&lt;</option>
+                <option>&lt;=</option>
+            </select>
+            <input type="text" placeholder="Filter value" aria-label="Filter value placeholder">
+            <button type="button" class="placeholder-button">Apply</button>
+        </section>
+
+        <section id="applied-queries-area" class="toolbar-group tags-row">
+            <h2 class="group-title">Applied Queries</h2>
+            <div id="applied-query-tags">
+                <span class="query-tag">status:active</span>
+                <span class="query-tag">type:block</span>
+            </div>
+        </section>
+    </header>
+
+    <aside id="left-sidebar" class="sidebar">
+        <section id="visualizer-controls" class="panel">
+            <h2 class="panel-title">Visualizer</h2>
+            <div class="tab-buttons" role="tablist" aria-label="Visualizer selector">
+                <button type="button" class="tab-button active" aria-selected="true">Simple view</button>
+                <button type="button" class="tab-button" aria-selected="false">Block view</button>
+            </div>
+            <p class="panel-note">TODO: connect visualizer plugins.</p>
+        </section>
+
+        <section id="tree-view-panel" class="panel">
+            <h2 class="panel-title">Tree View</h2>
+            <div class="panel-body placeholder-box">Tree view placeholder</div>
+        </section>
+
+        <section id="bird-view-panel" class="panel">
+            <h2 class="panel-title">Bird View</h2>
+            <div class="panel-body placeholder-box">Bird view placeholder</div>
+        </section>
+    </aside>
+
+    <main id="main-content" class="main-content">
+        <section id="main-view-panel" class="panel main-panel">
+            <h2 class="panel-title">Main View</h2>
+            <div id="main-view-content" class="panel-body placeholder-box">
+                {{ placeholder_message }}
+                <p>TODO: plugin render output will be injected here</p>
+            </div>
+        </section>
+    </main>
+</div>
+{% endblock %}
