@@ -42,27 +42,38 @@
         <section id="visualizer-controls" class="panel">
             <h2 class="panel-title">Visualizer</h2>
             <div class="tab-buttons" role="tablist" aria-label="Visualizer selector">
-                <button type="button" class="tab-button active" aria-selected="true">Simple view</button>
-                <button type="button" class="tab-button" aria-selected="false">Block view</button>
+                <button type="button" class="tab-button active" data-visualizer="simple" aria-selected="true">Simple view</button>
+                <button type="button" class="tab-button" data-visualizer="block" aria-selected="false">Block view</button>
             </div>
-            <p class="panel-note">TODO: connect visualizer plugins.</p>
+            <p id="visualizer-panel-note" class="panel-note">Active visualizer: simple</p>
         </section>
 
         <section id="tree-view-panel" class="panel">
             <h2 class="panel-title">Tree View</h2>
-            <div class="panel-body placeholder-box">Tree view placeholder</div>
+            <div id="tree-view-content" class="panel-body placeholder-box render-surface">
+                Tree view placeholder
+            </div>
         </section>
 
         <section id="bird-view-panel" class="panel">
             <h2 class="panel-title">Bird View</h2>
-            <div class="panel-body placeholder-box">Bird view placeholder</div>
+            <div id="bird-view-content" class="panel-body placeholder-box render-surface">
+                Bird view placeholder
+            </div>
+        </section>
+
+        <section id="console-panel" class="panel">
+            <h2 class="panel-title">Console</h2>
+            <div class="panel-body placeholder-box render-surface">
+                TODO: future command input and execution controls.
+            </div>
         </section>
     </aside>
 
     <main id="main-content" class="main-content">
         <section id="main-view-panel" class="panel main-panel">
             <h2 class="panel-title">Main View</h2>
-            <div id="main-view-content" class="panel-body placeholder-box">
+            <div id="main-view-content" class="panel-body placeholder-box render-surface">
                 {{ placeholder_message }}
                 <p>TODO: plugin render output will be injected here</p>
             </div>
