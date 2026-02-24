@@ -5,10 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "datasource-csv-plugin"
 version = "0.1.0"
-description = "Placeholder CSV datasource plugin package"
+description = "CSV datasource plugin package"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["graph_api"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["datasource_csv_plugin*"]
+
+[project.entry-points."graph_platform.datasource"]
+csv = "datasource_csv_plugin.plugin:CsvDatasourcePlugin"
