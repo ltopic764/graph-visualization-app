@@ -5,10 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "visualizer-simple-plugin"
 version = "0.1.0"
-description = "Placeholder simple visualizer plugin package"
+description = "Simple circle visualizer plugin for graph visualization"
 requires-python = ">=3.11"
-dependencies = []
+
+
+dependencies = [
+    "graph-api",
+    "jinja2"
+]
+
+
+[project.entry-points."graph.visualizers"]
+simple = "visualizer_simple_plugin.plugin:SimpleVisualizer"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["visualizer_simple_plugin*"]
+
+# For HTML templates
+[tool.setuptools.package-data]
+"visualizer_simple_plugin.templates" = ["*.html"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
-from graph_api.model import Graph
+from ..model import Graph
 
 
 class VisualizerPlugin(ABC):

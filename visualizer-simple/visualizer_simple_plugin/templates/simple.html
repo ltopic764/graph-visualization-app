@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .node circle { stroke: #333; stroke-width: 1px; transition: fill 0.3s; }
+        .node:hover circle { fill: #ff9800; cursor: pointer; }
+        .edge-line { stroke: #999; stroke-opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <div class="graph-container">
+        <svg width="800" height="600" style="background: #fafafa; border: 1px solid #eee;">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                        refX="{{ radius / scale - 3}}" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+                </marker>
+            </defs>
+
+            {% for edge in edges %}
+                {% set src = positions[edge.source] %}
+                {% set dst = positions[edge.target] %}
+                <line x1="{{ src.x }}" y1="{{ src.y }}"
+                      x2="{{ dst.x }}" y2="{{ dst.y }}"
+                      stroke="#333" stroke-width="{{ 2 * scale }}"
+                      marker-end="url(#arrowhead)" />
+            {% endfor %}
+
+            {% for node in nodes %}
+                {% set pos = positions[node.node_id] %}
+                <g class="node" id="node-{{ node.node_id }}">
+                    <circle cx="{{ pos.x }}" cy="{{ pos.y }}" r="{{ radius }}"
+                            fill="white" stroke="black" stroke-width="2" />
+                    <text x="{{ pos.x }}" y="{{ pos.y + (font_size/3) }}"
+                          text-anchor="middle" font-family="Arial"
+                          font-size="{{ font_size }}px" font-weight="bold">
+                        {{ node.label }}
+                    </text>
+                </g>
+            {% endfor %}
+        </svg>
+    </div>
+</body>
+</html>
