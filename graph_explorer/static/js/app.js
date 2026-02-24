@@ -4,11 +4,65 @@
     // TODO: add D3-based rendering for the active visualizer in Main View.
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
+    const EMPTY_GRAPH = { nodes: [], edges: [] };
+
     const state = {
         activeVisualizer: "simple",
         selectedNodeId: null,
-        graph: window.GRAPH_EXPLORER_MOCK_GRAPH || { nodes: [], edges: [] }
+        graph: EMPTY_GRAPH
     };
+
+    function isValidGraphShape(graph) {
+        return Boolean(graph) && Array.isArray(graph.nodes) && Array.isArray(graph.edges);
+    }
+
+    function toGraphState(graph) {
+        if (!isValidGraphShape(graph)) {
+            return EMPTY_GRAPH;
+        }
+        return {
+            nodes: graph.nodes,
+            edges: graph.edges
+        };
+    }
+
+    function getWindowMockGraph() {
+        if (!isValidGraphShape(window.GRAPH_EXPLORER_MOCK_GRAPH)) {
+            return null;
+        }
+        return toGraphState(window.GRAPH_EXPLORER_MOCK_GRAPH);
+    }
+
+    async function loadGraphData() {
+        try {
+            const response = await fetch("/api/mock-graph/", {
+                headers: { Accept: "application/json" }
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const payload = await response.json();
+            if (!isValidGraphShape(payload)) {
+                throw new Error("Invalid graph response shape; expected nodes[] and edges[].");
+            }
+
+            state.graph = toGraphState(payload);
+            renderAll();
+        } catch (error) {
+            console.warn("Graph Explorer: unable to load /api/mock-graph/.", error);
+
+            const fallbackGraph = getWindowMockGraph();
+            if (fallbackGraph) {
+                console.warn("Graph Explorer: falling back to window.GRAPH_EXPLORER_MOCK_GRAPH.");
+                state.graph = fallbackGraph;
+            } else {
+                state.graph = EMPTY_GRAPH;
+            }
+
+            renderAll();
+        }
+    }
 
     function escapeHtml(value) {
         return String(value)
@@ -260,5 +314,6 @@
     document.addEventListener("DOMContentLoaded", function () {
         bindVisualizerTabClicks();
         renderAll();
+        loadGraphData();
     });
 })();
