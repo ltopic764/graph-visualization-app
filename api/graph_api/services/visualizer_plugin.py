@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
-
-# TODO: Replace with a concrete graph model class when model contracts are defined.
-Graph = Any
+from graph_api.model import Graph
 
 
 class VisualizerPlugin(ABC):
