@@ -3,6 +3,10 @@ from jinja2 import Environment, FileSystemLoader
 from api.graph_api.services.visualizer_plugin import VisualizerPlugin
 from api.graph_api.model.graph import Graph
 
+#Width and height of the space for graph
+WIDTH = 800
+HEIGHT = 600
+
 
 def get_node_levels(graph: Graph):
     """
@@ -69,7 +73,7 @@ class SimpleVisualizer(VisualizerPlugin):
 
         # --- Calculate Coords ---
         positions = {}
-        width, height = 800, 600
+        width, height = WIDTH, HEIGHT
 
         # Get max level from columns keys
         max_lvl = max(columns.keys()) if columns else 0
