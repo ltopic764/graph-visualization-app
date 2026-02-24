@@ -13,7 +13,7 @@ class Edge:
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id,
+            "id": self.edge_id,
             "source": self.source,
             "target": self.target,
             "weight": self.weight,

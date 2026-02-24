@@ -1,3 +1,7 @@
 # TODO: Add project-level development dependencies.
 # Example:
 # -r api/requirements.txt
+
+-e ./api
+-e ./visualizer-simple
+jinja2
