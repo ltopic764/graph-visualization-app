@@ -42,7 +42,7 @@ def print_graph_inspection(title, graph):
 
 def main():
     plugin = CsvDatasourcePlugin()
-    data_dir = "test_data"
+    data_dir = "test_data/test_data_csv"
 
     path_acyclic = os.path.join(data_dir, "dataset_acyclic.csv")
     if os.path.exists(path_acyclic):
