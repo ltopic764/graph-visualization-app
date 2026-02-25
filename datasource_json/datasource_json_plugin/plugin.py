@@ -2,7 +2,7 @@ import json
 from typing import Any
 from api.graph_api.model import Graph, Node, Edge
 from api.graph_api.services.datasource_plugin import DataSourcePlugin
-from .base import BaseDatasourcePlugin
+from api.graph_api.datasource_common.base import BaseDatasourcePlugin
 
 class JsonDatasourcePlugin(BaseDatasourcePlugin):
     # Adapter to read a JSON file and map it to a Graph object
@@ -28,6 +28,12 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
                 "type": "str",
                 "label": "Path to JSON file",
                 "required": True
+            },
+            "directed": {
+                "type": "bool",
+                "label": "Directed graph",
+                "required": False,
+                "default": True
             }
         }
 
@@ -38,7 +44,8 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
         # The idea is to read a JSON file and return a dictionary that will have keys 'nodes' and 'edges' with data
 
         # Read JSON file
-        with open(source, 'r', encoding='utf-8') as f:
+        path = self._resolve_path(source, kwargs)
+        with open(path, 'r', encoding='utf-8') as f:
             raw_json = json.load(f)
 
         # If the JSON already has 'nodes' and 'edges' keys
@@ -108,6 +115,16 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             for item in obj:
                 self._collect_all_ids(item, id_registry)
 
+    def _new_auto_id(self, counter: list[int], id_registry: set[str]) -> str:
+        # Ensure no collision
+        while True:
+            counter[0] += 1
+            nid = f"auto_{counter[0]}"
+            if nid not in id_registry:
+                id_registry.add(nid)
+                return nid
+
+
     # Going through the JSON and bulding list of nodes and edges
     def _traverse(self, obj: Any, nodes: list, edges: list, id_registry: set, parent_id: str, counter: list) -> str:
 
@@ -116,16 +133,13 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             return None
 
         # Find id
-        if "id" in obj:
+        if "id" in obj and obj["id"] is not None:
             node_id = str(obj["id"])
-        elif "@id" in obj:
+        elif "@id" in obj and obj["@id"] is not None:
             node_id = str(obj["@id"])
         else :
             # No id
-            counter[0] += 1
-            node_id = str(counter[0])
-            # Add to registry so the children can reference
-            id_registry.add(node_id)
+            node_id = self._new_auto_id(counter, id_registry)
 
         label = obj.get("label") or obj.get("name") or node_id
 
@@ -141,18 +155,24 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             if isinstance(value, (dict, list)):
                 # Nested object, child of the node
                 children[key] = value
+                continue
 
             elif isinstance(value, str) and value in id_registry:
                 # String attribute the same as an existing id, cycle
                 edges.append({
                     "source": node_id,
-                    "target": value,
-                    "directed": True
+                    "target": value
                 })
 
             else:
                 # Regular attribute
                 attributes[key] = value
+
+            # if isinstance(value, str) and value in id_registry and key.lower().endswith(("id", "_id", "ref", "_ref")):
+            #     edges.append({"source": node_id, "target": value, "directed": True})
+            # else:
+            #     # Regular attribute
+            #     attributes[key] = value
 
         # Create Node
         node_data = {"id": node_id, "label": label}
@@ -163,8 +183,7 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
         if parent_id is not None:
             edges.append({
                 "source": parent_id,
-                "target": node_id,
-                "directed": True
+                "target": node_id
             })
 
         for key, value in children.items():
