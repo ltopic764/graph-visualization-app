@@ -7,11 +7,17 @@
     const EMPTY_GRAPH = { nodes: [], edges: [] };
     const DEFAULT_FILTER_OPERATOR = "==";
     const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
+    const GRAPH_FETCH_ENDPOINT = "/api/mock-graph/";
+    const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
+    let graphFetchSuccessHideTimeoutId = null;
 
     const state = {
         activeVisualizer: "simple",
         selectedNodeId: null,
         graph: EMPTY_GRAPH,
+        graphFetchStatus: "idle",
+        graphFetchErrorMessage: null,
+        graphFetchLastLoadedAt: null,
         queryUI: {
             searchText: "",
             filterAttribute: "",
@@ -43,16 +49,31 @@
         };
     }
 
-    function getWindowMockGraph() {
-        if (!isValidGraphShape(window.GRAPH_EXPLORER_MOCK_GRAPH)) {
-            return null;
+    function getGraphFetchErrorMessage(error) {
+        if (error && typeof error.message === "string" && error.message.trim()) {
+            return error.message.trim();
         }
-        return toGraphState(window.GRAPH_EXPLORER_MOCK_GRAPH);
+        return "Unexpected error.";
+    }
+
+    function clearGraphFetchSuccessHideTimeout() {
+        if (graphFetchSuccessHideTimeoutId !== null) {
+            clearTimeout(graphFetchSuccessHideTimeoutId);
+            graphFetchSuccessHideTimeoutId = null;
+        }
     }
 
     async function loadGraphData() {
+        clearGraphFetchSuccessHideTimeout();
+        state.graphFetchStatus = "loading";
+        state.graphFetchErrorMessage = null;
+        renderAll();
+
+        // TODO: replace GRAPH_FETCH_ENDPOINT with the real platform graph endpoint.
+        // TODO: add retry throttling/backoff to avoid tight repeated failures.
+        // TODO: centralize async status handling for graph/query/filter/console actions.
         try {
-            const response = await fetch("/api/mock-graph/", {
+            const response = await fetch(GRAPH_FETCH_ENDPOINT, {
                 headers: { Accept: "application/json" }
             });
             if (!response.ok) {
@@ -65,18 +86,25 @@
             }
 
             state.graph = toGraphState(payload);
+            state.graphFetchStatus = "success";
+            state.graphFetchErrorMessage = null;
+            state.graphFetchLastLoadedAt = Date.now();
             renderAll();
+
+            graphFetchSuccessHideTimeoutId = setTimeout(function () {
+                if (state.graphFetchStatus === "success") {
+                    state.graphFetchStatus = "idle";
+                    renderAll();
+                }
+                graphFetchSuccessHideTimeoutId = null;
+            }, SUCCESS_STATUS_AUTO_HIDE_MS);
         } catch (error) {
-            console.warn("Graph Explorer: unable to load /api/mock-graph/.", error);
+            console.warn(`Graph Explorer: unable to load ${GRAPH_FETCH_ENDPOINT}.`, error);
 
-            const fallbackGraph = getWindowMockGraph();
-            if (fallbackGraph) {
-                console.warn("Graph Explorer: falling back to window.GRAPH_EXPLORER_MOCK_GRAPH.");
-                state.graph = fallbackGraph;
-            } else {
-                state.graph = EMPTY_GRAPH;
-            }
-
+            state.graph = EMPTY_GRAPH;
+            state.graphFetchStatus = "error";
+            state.graphFetchErrorMessage = `Failed to load graph (${getGraphFetchErrorMessage(error)})`;
+            state.graphFetchLastLoadedAt = null;
             renderAll();
         }
     }
@@ -189,6 +217,65 @@
             historyList: document.getElementById("console-history-list"),
             historyEmpty: document.getElementById("console-history-empty")
         };
+    }
+
+    function getGraphFetchStatusElements() {
+        return {
+            banner: document.getElementById("graph-fetch-status"),
+            message: document.getElementById("graph-fetch-status-message"),
+            retryButton: document.getElementById("graph-fetch-retry-button")
+        };
+    }
+
+    function getGraphFetchStatusLabel() {
+        if (state.graphFetchStatus === "loading") {
+            return "Loading graph...";
+        }
+        if (state.graphFetchStatus === "success") {
+            if (state.graphFetchLastLoadedAt) {
+                const loadedAt = new Date(state.graphFetchLastLoadedAt);
+                if (!Number.isNaN(loadedAt.getTime())) {
+                    return `Graph loaded (${loadedAt.toLocaleTimeString()}).`;
+                }
+            }
+            return "Graph loaded.";
+        }
+        if (state.graphFetchStatus === "error") {
+            return state.graphFetchErrorMessage || "Failed to load graph.";
+        }
+        return "";
+    }
+
+    function renderGraphFetchStatus() {
+        const refs = getGraphFetchStatusElements();
+        if (!refs.banner || !refs.message) {
+            return;
+        }
+
+        const statusLabel = getGraphFetchStatusLabel();
+        const isVisible = state.graphFetchStatus !== "idle" && Boolean(statusLabel);
+        refs.banner.classList.toggle("is-hidden", !isVisible);
+        refs.banner.classList.remove("is-idle", "is-loading", "is-success", "is-error");
+        if (isVisible) {
+            refs.banner.classList.add(`is-${state.graphFetchStatus}`);
+        }
+        refs.message.textContent = statusLabel;
+
+        if (refs.retryButton) {
+            const isError = state.graphFetchStatus === "error";
+            refs.retryButton.hidden = !isError;
+            refs.retryButton.disabled = state.graphFetchStatus === "loading";
+        }
+    }
+
+    function bindGraphFetchControls() {
+        const refs = getGraphFetchStatusElements();
+        if (!refs.retryButton) {
+            return;
+        }
+        refs.retryButton.addEventListener("click", function () {
+            loadGraphData();
+        });
     }
 
     function pushConsoleHistory(command) {
@@ -641,6 +728,7 @@
     function renderAll() {
         syncSelectedNode();
         renderUIState();
+        renderGraphFetchStatus();
         renderToolbarState();
         renderConsole();
         renderMainView();
@@ -652,6 +740,7 @@
         bindToolbarControls();
         bindConsoleControls();
         bindVisualizerTabClicks();
+        bindGraphFetchControls();
         renderAll();
         loadGraphData();
     });
