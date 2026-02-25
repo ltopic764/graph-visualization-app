@@ -5,11 +5,28 @@
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
     const EMPTY_GRAPH = { nodes: [], edges: [] };
+    const DEFAULT_FILTER_OPERATOR = "==";
+    const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
 
     const state = {
         activeVisualizer: "simple",
         selectedNodeId: null,
-        graph: EMPTY_GRAPH
+        graph: EMPTY_GRAPH,
+        queryUI: {
+            searchText: "",
+            filterAttribute: "",
+            filterOperator: DEFAULT_FILTER_OPERATOR,
+            filterValue: "",
+            appliedChips: [],
+            nextChipId: 1
+        },
+        consoleUI: {
+            currentInput: "",
+            history: [],
+            outputLines: [],
+            maxHistory: 20,
+            maxOutputLines: 120
+        }
     };
 
     function isValidGraphShape(graph) {
@@ -145,6 +162,324 @@
         }
         state.activeVisualizer = mode;
         renderAll();
+    }
+
+    function getToolbarElements() {
+        return {
+            searchInput: document.getElementById("search-input"),
+            filterAttributeInput: document.getElementById("filter-attribute-input"),
+            filterOperatorSelect: document.getElementById("filter-operator-select"),
+            filterValueInput: document.getElementById("filter-value-input"),
+            applyQueryButton: document.getElementById("apply-query-button"),
+            clearQueryButton: document.getElementById("clear-query-state-button"),
+            appliedQueryTags: document.getElementById("applied-query-tags"),
+            appliedQueryCount: document.getElementById("applied-query-count"),
+            appliedQueryEmpty: document.getElementById("applied-query-empty"),
+            searchPreview: document.getElementById("search-preview")
+        };
+    }
+
+    function getConsoleElements() {
+        return {
+            commandInput: document.getElementById("console-command-input"),
+            runButton: document.getElementById("console-run-button"),
+            clearButton: document.getElementById("console-clear-button"),
+            output: document.getElementById("console-output"),
+            outputEmpty: document.getElementById("console-output-empty"),
+            historyList: document.getElementById("console-history-list"),
+            historyEmpty: document.getElementById("console-history-empty")
+        };
+    }
+
+    function pushConsoleHistory(command) {
+        state.consoleUI.history.push(command);
+        if (state.consoleUI.history.length > state.consoleUI.maxHistory) {
+            state.consoleUI.history = state.consoleUI.history.slice(-state.consoleUI.maxHistory);
+        }
+    }
+
+    function pushConsoleOutputLine(line) {
+        state.consoleUI.outputLines.push(line);
+        if (state.consoleUI.outputLines.length > state.consoleUI.maxOutputLines) {
+            state.consoleUI.outputLines = state.consoleUI.outputLines.slice(-state.consoleUI.maxOutputLines);
+        }
+    }
+
+    function renderConsole() {
+        const refs = getConsoleElements();
+
+        if (refs.commandInput && refs.commandInput.value !== state.consoleUI.currentInput) {
+            refs.commandInput.value = state.consoleUI.currentInput;
+        }
+
+        if (refs.output) {
+            refs.output.innerHTML = "";
+            state.consoleUI.outputLines.forEach(function (line) {
+                const lineEl = document.createElement("p");
+                lineEl.className = "console-output-line";
+                lineEl.textContent = line;
+                refs.output.appendChild(lineEl);
+            });
+        }
+
+        if (refs.outputEmpty) {
+            refs.outputEmpty.style.display = state.consoleUI.outputLines.length ? "none" : "";
+        }
+
+        if (refs.historyList) {
+            refs.historyList.innerHTML = "";
+            state.consoleUI.history.slice().reverse().forEach(function (command) {
+                const itemEl = document.createElement("li");
+                itemEl.className = "console-history-item";
+                itemEl.textContent = command;
+                refs.historyList.appendChild(itemEl);
+            });
+        }
+
+        if (refs.historyEmpty) {
+            refs.historyEmpty.style.display = state.consoleUI.history.length ? "none" : "";
+        }
+    }
+
+    function handleRunConsoleCommand() {
+        const command = state.consoleUI.currentInput.trim();
+        if (!command) {
+            return;
+        }
+
+        pushConsoleHistory(command);
+        pushConsoleOutputLine(`> ${command}`);
+        pushConsoleOutputLine(CONSOLE_PLACEHOLDER_OUTPUT);
+
+        // TODO: parse and validate supported console commands.
+        // TODO: connect console commands to backend/platform endpoint.
+        // TODO: map command responses to corresponding console UI updates.
+
+        state.consoleUI.currentInput = "";
+        renderConsole();
+    }
+
+    function clearConsoleState() {
+        state.consoleUI.currentInput = "";
+        state.consoleUI.history = [];
+        state.consoleUI.outputLines = [];
+        renderConsole();
+    }
+
+    function bindConsoleControls() {
+        const refs = getConsoleElements();
+        if (!refs.commandInput) {
+            return;
+        }
+
+        refs.commandInput.addEventListener("input", function (event) {
+            state.consoleUI.currentInput = event.target.value;
+        });
+
+        refs.commandInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                handleRunConsoleCommand();
+            }
+        });
+
+        if (refs.runButton) {
+            refs.runButton.addEventListener("click", function () {
+                handleRunConsoleCommand();
+            });
+        }
+
+        if (refs.clearButton) {
+            refs.clearButton.addEventListener("click", function () {
+                clearConsoleState();
+            });
+        }
+    }
+
+    function createAppliedChip(label, type, payload) {
+        const chip = {
+            id: state.queryUI.nextChipId,
+            label: label,
+            type: type,
+            payload: payload
+        };
+        state.queryUI.nextChipId += 1;
+        return chip;
+    }
+
+    function renderAppliedChips() {
+        const refs = getToolbarElements();
+        const tags = refs.appliedQueryTags;
+        if (!tags) {
+            return;
+        }
+
+        tags.innerHTML = "";
+        const chips = state.queryUI.appliedChips;
+
+        if (!chips.length) {
+            if (refs.appliedQueryEmpty) {
+                refs.appliedQueryEmpty.style.display = "";
+            }
+            return;
+        }
+
+        if (refs.appliedQueryEmpty) {
+            refs.appliedQueryEmpty.style.display = "none";
+        }
+
+        chips.forEach(function (chip) {
+            const chipEl = document.createElement("span");
+            chipEl.className = "query-tag";
+
+            const labelEl = document.createElement("span");
+            labelEl.className = "query-tag-label";
+            labelEl.textContent = chip.label;
+
+            const removeButton = document.createElement("button");
+            removeButton.type = "button";
+            removeButton.className = "query-tag-remove";
+            removeButton.setAttribute("data-chip-id", String(chip.id));
+            removeButton.setAttribute("aria-label", `Remove query: ${chip.label}`);
+            removeButton.textContent = "x";
+
+            chipEl.appendChild(labelEl);
+            chipEl.appendChild(removeButton);
+            tags.appendChild(chipEl);
+        });
+    }
+
+    function renderToolbarState() {
+        const refs = getToolbarElements();
+        const chipCount = state.queryUI.appliedChips.length;
+        const searchText = state.queryUI.searchText.trim();
+
+        if (refs.searchInput && refs.searchInput.value !== state.queryUI.searchText) {
+            refs.searchInput.value = state.queryUI.searchText;
+        }
+        if (refs.filterAttributeInput && refs.filterAttributeInput.value !== state.queryUI.filterAttribute) {
+            refs.filterAttributeInput.value = state.queryUI.filterAttribute;
+        }
+        if (refs.filterOperatorSelect && refs.filterOperatorSelect.value !== state.queryUI.filterOperator) {
+            refs.filterOperatorSelect.value = state.queryUI.filterOperator;
+        }
+        if (refs.filterValueInput && refs.filterValueInput.value !== state.queryUI.filterValue) {
+            refs.filterValueInput.value = state.queryUI.filterValue;
+        }
+
+        if (refs.appliedQueryCount) {
+            refs.appliedQueryCount.textContent = `${chipCount} applied`;
+        }
+        if (refs.searchPreview) {
+            refs.searchPreview.textContent = searchText ? `Current search: ${searchText}` : "Current search: none";
+        }
+
+        renderAppliedChips();
+    }
+
+    function removeAppliedChip(chipId) {
+        const targetId = String(chipId);
+        state.queryUI.appliedChips = state.queryUI.appliedChips.filter(function (chip) {
+            return String(chip.id) !== targetId;
+        });
+        renderToolbarState();
+    }
+
+    function handleApplyQuery() {
+        const searchText = state.queryUI.searchText.trim();
+        const attribute = state.queryUI.filterAttribute.trim();
+        const operator = state.queryUI.filterOperator.trim();
+        const value = state.queryUI.filterValue.trim();
+        const chipsToAdd = [];
+
+        if (searchText) {
+            chipsToAdd.push(createAppliedChip(`search: ${searchText}`, "search", { searchText: searchText }));
+        }
+
+        if (attribute && operator && value) {
+            chipsToAdd.push(createAppliedChip(`${attribute} ${operator} ${value}`, "filter", {
+                attribute: attribute,
+                operator: operator,
+                value: value
+            }));
+        }
+
+        if (!chipsToAdd.length) {
+            renderToolbarState();
+            return;
+        }
+
+        state.queryUI.appliedChips = state.queryUI.appliedChips.concat(chipsToAdd);
+
+        // TODO: send query/filter payload to backend and rerender filtered subgraph.
+        renderToolbarState();
+    }
+
+    function resetQueryFilterState() {
+        state.queryUI.searchText = "";
+        state.queryUI.filterAttribute = "";
+        state.queryUI.filterOperator = DEFAULT_FILTER_OPERATOR;
+        state.queryUI.filterValue = "";
+        state.queryUI.appliedChips = [];
+        state.queryUI.nextChipId = 1;
+
+        // TODO: when backend filtering is integrated, clear server-side query/filter state too.
+        renderToolbarState();
+    }
+
+    function bindToolbarControls() {
+        const refs = getToolbarElements();
+        if (!refs.searchInput || !refs.filterAttributeInput || !refs.filterOperatorSelect || !refs.filterValueInput) {
+            return;
+        }
+
+        refs.searchInput.addEventListener("input", function (event) {
+            state.queryUI.searchText = event.target.value;
+            renderToolbarState();
+        });
+
+        refs.filterAttributeInput.addEventListener("input", function (event) {
+            state.queryUI.filterAttribute = event.target.value;
+        });
+
+        refs.filterOperatorSelect.addEventListener("change", function (event) {
+            state.queryUI.filterOperator = event.target.value;
+        });
+
+        refs.filterValueInput.addEventListener("input", function (event) {
+            state.queryUI.filterValue = event.target.value;
+        });
+
+        if (refs.applyQueryButton) {
+            refs.applyQueryButton.addEventListener("click", function () {
+                handleApplyQuery();
+            });
+        }
+
+        if (refs.clearQueryButton) {
+            refs.clearQueryButton.addEventListener("click", function () {
+                resetQueryFilterState();
+            });
+        }
+
+        if (refs.appliedQueryTags) {
+            refs.appliedQueryTags.addEventListener("click", function (event) {
+                const target = event.target;
+                if (!target || !target.matches("[data-chip-id]")) {
+                    return;
+                }
+                removeAppliedChip(target.getAttribute("data-chip-id"));
+            });
+        }
+
+        [refs.searchInput, refs.filterAttributeInput, refs.filterValueInput].forEach(function (input) {
+            input.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleApplyQuery();
+                }
+            });
+        });
     }
 
     function bindMainNodeCardClicks(mainView) {
@@ -306,12 +641,16 @@
     function renderAll() {
         syncSelectedNode();
         renderUIState();
+        renderToolbarState();
+        renderConsole();
         renderMainView();
         renderTreeView();
         renderBirdView();
     }
 
     document.addEventListener("DOMContentLoaded", function () {
+        bindToolbarControls();
+        bindConsoleControls();
         bindVisualizerTabClicks();
         renderAll();
         loadGraphData();
