@@ -104,7 +104,7 @@ def test_rendering(use_bigger=True):
     html_output = visualizer.render(g)
 
     # Save
-    filename = f"test_prikaz_{suffix}.html"
+    filename = f"test_view_{suffix}.html"
     with open(filename, "w", encoding="utf-8") as f:
         f.write(html_output)
 
