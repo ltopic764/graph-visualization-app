@@ -6,6 +6,7 @@
     // TODO: replace mock data state with platform/API integration payloads.
     const EMPTY_GRAPH = { nodes: [], edges: [] };
     const DEFAULT_FILTER_OPERATOR = "==";
+    const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
 
     const state = {
         activeVisualizer: "simple",
@@ -18,6 +19,13 @@
             filterValue: "",
             appliedChips: [],
             nextChipId: 1
+        },
+        consoleUI: {
+            currentInput: "",
+            history: [],
+            outputLines: [],
+            maxHistory: 20,
+            maxOutputLines: 120
         }
     };
 
@@ -169,6 +177,123 @@
             appliedQueryEmpty: document.getElementById("applied-query-empty"),
             searchPreview: document.getElementById("search-preview")
         };
+    }
+
+    function getConsoleElements() {
+        return {
+            commandInput: document.getElementById("console-command-input"),
+            runButton: document.getElementById("console-run-button"),
+            clearButton: document.getElementById("console-clear-button"),
+            output: document.getElementById("console-output"),
+            outputEmpty: document.getElementById("console-output-empty"),
+            historyList: document.getElementById("console-history-list"),
+            historyEmpty: document.getElementById("console-history-empty")
+        };
+    }
+
+    function pushConsoleHistory(command) {
+        state.consoleUI.history.push(command);
+        if (state.consoleUI.history.length > state.consoleUI.maxHistory) {
+            state.consoleUI.history = state.consoleUI.history.slice(-state.consoleUI.maxHistory);
+        }
+    }
+
+    function pushConsoleOutputLine(line) {
+        state.consoleUI.outputLines.push(line);
+        if (state.consoleUI.outputLines.length > state.consoleUI.maxOutputLines) {
+            state.consoleUI.outputLines = state.consoleUI.outputLines.slice(-state.consoleUI.maxOutputLines);
+        }
+    }
+
+    function renderConsole() {
+        const refs = getConsoleElements();
+
+        if (refs.commandInput && refs.commandInput.value !== state.consoleUI.currentInput) {
+            refs.commandInput.value = state.consoleUI.currentInput;
+        }
+
+        if (refs.output) {
+            refs.output.innerHTML = "";
+            state.consoleUI.outputLines.forEach(function (line) {
+                const lineEl = document.createElement("p");
+                lineEl.className = "console-output-line";
+                lineEl.textContent = line;
+                refs.output.appendChild(lineEl);
+            });
+        }
+
+        if (refs.outputEmpty) {
+            refs.outputEmpty.style.display = state.consoleUI.outputLines.length ? "none" : "";
+        }
+
+        if (refs.historyList) {
+            refs.historyList.innerHTML = "";
+            state.consoleUI.history.slice().reverse().forEach(function (command) {
+                const itemEl = document.createElement("li");
+                itemEl.className = "console-history-item";
+                itemEl.textContent = command;
+                refs.historyList.appendChild(itemEl);
+            });
+        }
+
+        if (refs.historyEmpty) {
+            refs.historyEmpty.style.display = state.consoleUI.history.length ? "none" : "";
+        }
+    }
+
+    function handleRunConsoleCommand() {
+        const command = state.consoleUI.currentInput.trim();
+        if (!command) {
+            return;
+        }
+
+        pushConsoleHistory(command);
+        pushConsoleOutputLine(`> ${command}`);
+        pushConsoleOutputLine(CONSOLE_PLACEHOLDER_OUTPUT);
+
+        // TODO: parse and validate supported console commands.
+        // TODO: connect console commands to backend/platform endpoint.
+        // TODO: map command responses to corresponding console UI updates.
+
+        state.consoleUI.currentInput = "";
+        renderConsole();
+    }
+
+    function clearConsoleState() {
+        state.consoleUI.currentInput = "";
+        state.consoleUI.history = [];
+        state.consoleUI.outputLines = [];
+        renderConsole();
+    }
+
+    function bindConsoleControls() {
+        const refs = getConsoleElements();
+        if (!refs.commandInput) {
+            return;
+        }
+
+        refs.commandInput.addEventListener("input", function (event) {
+            state.consoleUI.currentInput = event.target.value;
+        });
+
+        refs.commandInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                handleRunConsoleCommand();
+            }
+        });
+
+        if (refs.runButton) {
+            refs.runButton.addEventListener("click", function () {
+                handleRunConsoleCommand();
+            });
+        }
+
+        if (refs.clearButton) {
+            refs.clearButton.addEventListener("click", function () {
+                clearConsoleState();
+            });
+        }
     }
 
     function createAppliedChip(label, type, payload) {
@@ -517,6 +642,7 @@
         syncSelectedNode();
         renderUIState();
         renderToolbarState();
+        renderConsole();
         renderMainView();
         renderTreeView();
         renderBirdView();
@@ -524,6 +650,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         bindToolbarControls();
+        bindConsoleControls();
         bindVisualizerTabClicks();
         renderAll();
         loadGraphData();

@@ -183,6 +183,79 @@ body {
     color: var(--muted);
 }
 
+.console-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 0;
+}
+
+.console-input-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.4rem;
+}
+
+.console-command-input {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.86rem;
+    min-width: 0;
+}
+
+.console-section {
+    border: 1px solid #d9e2ec;
+    border-radius: 6px;
+    background: #f8fafc;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.console-section-title {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #526476;
+}
+
+.console-output,
+.console-history-list {
+    margin: 0;
+    padding: 0.35rem;
+    border: 1px solid #d8e0ea;
+    border-radius: 4px;
+    background: #ffffff;
+    max-height: 120px;
+    overflow: auto;
+}
+
+.console-output-line {
+    margin: 0;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: #203244;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.console-history-list {
+    padding-left: 1.5rem;
+}
+
+.console-history-item {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 0.8rem;
+    color: #2c4054;
+    margin: 0.12rem 0;
+    word-break: break-word;
+}
+
 .panel-body {
     flex: 1;
     min-height: 0;
@@ -325,5 +398,9 @@ body {
     .sidebar {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto auto;
+    }
+
+    .console-input-row {
+        grid-template-columns: 1fr;
     }
 }

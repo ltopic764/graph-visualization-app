@@ -82,8 +82,30 @@
 
         <section id="console-panel" class="panel">
             <h2 class="panel-title">Console</h2>
-            <div class="panel-body placeholder-box render-surface">
-                TODO: future command input and execution controls.
+            <div id="console-panel-body" class="panel-body console-panel-body">
+                <div id="console-input-row" class="console-input-row">
+                    <input
+                        id="console-command-input"
+                        class="console-command-input"
+                        type="text"
+                        placeholder="Enter command (frontend-only placeholder)"
+                        aria-label="Console command input"
+                    >
+                    <button id="console-run-button" type="button" class="placeholder-button">Run</button>
+                    <button id="console-clear-button" type="button" class="placeholder-button secondary-button">Clear</button>
+                </div>
+
+                <section class="console-section" aria-label="Console output">
+                    <h3 class="console-section-title">Output</h3>
+                    <div id="console-output" class="console-output" aria-live="polite"></div>
+                    <p id="console-output-empty" class="empty-note">No console output yet.</p>
+                </section>
+
+                <section class="console-section" aria-label="Console history">
+                    <h3 class="console-section-title">History</h3>
+                    <ol id="console-history-list" class="console-history-list"></ol>
+                    <p id="console-history-empty" class="empty-note">No command history yet.</p>
+                </section>
             </div>
         </section>
     </aside>
