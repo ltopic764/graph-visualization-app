@@ -34,7 +34,7 @@ print(f"Generating acyclic graph CSV ({NODE_COUNT} nodes)...")
 
 acyclic_rows = []
 # Header
-acyclic_rows.append(["id", "name", "role", "salary", "department", "city", "hired_at", "reports_to"])
+acyclic_rows.append(["id", "name", "role", "salary", "department", "city", "hired_at", "reports_to_id"])
 
 acyclic_rows.append(["emp_1", get_name(), "CEO", "15000.00", "Executive", "Beograd", "2010-05-20", ""])
 
@@ -73,7 +73,7 @@ with open(os.path.join(OUTPUT_DIR, "dataset_acyclic.csv"), "w", newline="", enco
 print(f"Generating cyclic graph CSV ({NODE_COUNT} nodes)...")
 
 cyclic_rows = []
-cyclic_rows.append(["id", "username", "efficiency_score", "role", "main_skill", "reviewed_by", "blocked_by"])
+cyclic_rows.append(["id", "username", "efficiency_score", "role", "main_skill", "reviewed_by_id", "blocked_by_id"])
 
 all_ids = [f"dev_{i}" for i in range(1, NODE_COUNT + 1)]
 
