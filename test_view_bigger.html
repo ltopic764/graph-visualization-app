@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .block-container {
+            border: 1px solid #333;
+            background-color: #fff;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .block-header {
+            background-color: #34495e;
+            color: white;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .attr-table td {
+            border-bottom: 1px solid #eee;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
+        .key { font-weight: bold; color: #555; }
+        .val { color: #000; text-align: right; }
+        line { stroke: #333; }
+
+        /* DECORATOR STYLES */
+        .attr-scroll-area {
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
+
+        .scroll-active {
+            overflow-y: auto; /* Scroll active only by class */
+        }
+
+        /* Nice scroll for small elements */
+        .scroll-active::-webkit-scrollbar { width: 4px; }
+        .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <svg width="1500" height="1320" style="background: #fafafa; border: 1px solid #eee;">
+        <defs>
+            
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                refX="83.0" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+            </marker>
+        </defs>
+
+        <!-- Edges -->
+        
+            
+            
+            <line x1="250.0" y1="660.0"
+                  x2="500.0" y2="220.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="660.0"
+                  x2="500.0" y2="440.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="660.0"
+                  x2="500.0" y2="660.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="660.0"
+                  x2="500.0" y2="880.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="660.0"
+                  x2="500.0" y2="1100.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="220.0"
+                  x2="750.0" y2="120.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="220.0"
+                  x2="750.0" y2="240.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="440.0"
+                  x2="750.0" y2="360.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="440.0"
+                  x2="750.0" y2="480.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="660.0"
+                  x2="750.0" y2="600.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="660.0"
+                  x2="750.0" y2="720.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="880.0"
+                  x2="750.0" y2="840.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="880.0"
+                  x2="750.0" y2="960.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="1100.0"
+                  x2="750.0" y2="1080.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="1100.0"
+                  x2="750.0" y2="1200.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="720.0"
+                  x2="1000.0" y2="924.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="240.0"
+                  x2="1000.0" y2="264.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="1080.0"
+                  x2="1000.0" y2="1056.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="360.0"
+                  x2="1000.0" y2="660.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="240.0"
+                  x2="1000.0" y2="396.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="1080.0"
+                  x2="1000.0" y2="1188.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="480.0"
+                  x2="1000.0" y2="792.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="240.0"
+                  x2="1000.0" y2="528.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="750.0" y1="120.0"
+                  x2="1000.0" y2="132.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1000.0" y1="792.0"
+                  x2="1250.0" y2="880.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1000.0" y1="264.0"
+                  x2="1250.0" y2="440.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1000.0" y1="792.0"
+                  x2="1250.0" y2="1100.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1000.0" y1="528.0"
+                  x2="1250.0" y2="660.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1000.0" y1="132.0"
+                  x2="1250.0" y2="220.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="1250.0" y1="220.0"
+                  x2="250.0" y2="660.0"
+                  stroke-width="0.8999999999999999"
+                   marker-end="url(#arrowhead)"  />
+        
+
+        <!-- Nodes as Blocks -->
+        
+            
+            <foreignObject x="202.0" y="630.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Main Hub
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">type</td>
+                                    <td class="val">Root</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">priority</td>
+                                    <td class="val">High</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="452.0" y="190.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Branch 2
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">1</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">load</td>
+                                    <td class="val">59%</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="452.0" y="410.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Branch 3
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">1</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">load</td>
+                                    <td class="val">71%</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="452.0" y="630.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Branch 4
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">1</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">load</td>
+                                    <td class="val">28%</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="452.0" y="850.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Branch 5
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">1</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">load</td>
+                                    <td class="val">12%</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="452.0" y="1070.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Branch 6
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">1</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">load</td>
+                                    <td class="val">83%</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="90.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 7
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="210.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 8
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="330.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 9
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="450.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 10
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="570.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 11
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="690.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 12
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="810.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 13
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="930.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 14
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="1050.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 15
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="702.0" y="1170.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Sub 16
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">2</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">active</td>
+                                    <td class="val">True</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="894.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 17
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">25.5</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="234.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 18
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">27.0</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="1026.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 19
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">28.5</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="630.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 20
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">30.0</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="366.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 21
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">31.5</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="1158.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 22
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">33.0</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="762.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 23
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">34.5</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="498.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 24
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">36.0</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="952.0" y="102.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        Leaf 25
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">val</td>
+                                    <td class="val">37.5</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="1202.0" y="850.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        DataNode 26
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area scroll-active">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">status</td>
+                                    <td class="val">Overflow</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">version</td>
+                                    <td class="val">1.0.4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">author</td>
+                                    <td class="val">Kolega3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">created</td>
+                                    <td class="val">2026-02-25</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">checksum</td>
+                                    <td class="val">AX-992</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">metadata</td>
+                                    <td class="val">hidden_data</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">last_log</td>
+                                    <td class="val">success</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="1202.0" y="410.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        DataNode 27
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area scroll-active">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">status</td>
+                                    <td class="val">Overflow</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">version</td>
+                                    <td class="val">1.0.4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">author</td>
+                                    <td class="val">Kolega3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">created</td>
+                                    <td class="val">2026-02-25</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">checksum</td>
+                                    <td class="val">AX-992</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">metadata</td>
+                                    <td class="val">hidden_data</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">last_log</td>
+                                    <td class="val">success</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="1202.0" y="1070.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        DataNode 28
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area scroll-active">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">status</td>
+                                    <td class="val">Overflow</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">version</td>
+                                    <td class="val">1.0.4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">author</td>
+                                    <td class="val">Kolega3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">created</td>
+                                    <td class="val">2026-02-25</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">checksum</td>
+                                    <td class="val">AX-992</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">metadata</td>
+                                    <td class="val">hidden_data</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">last_log</td>
+                                    <td class="val">success</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="1202.0" y="630.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        DataNode 29
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area scroll-active">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">status</td>
+                                    <td class="val">Overflow</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">version</td>
+                                    <td class="val">1.0.4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">author</td>
+                                    <td class="val">Kolega3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">created</td>
+                                    <td class="val">2026-02-25</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">checksum</td>
+                                    <td class="val">AX-992</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">metadata</td>
+                                    <td class="val">hidden_data</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">last_log</td>
+                                    <td class="val">success</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="1202.0" y="190.0"
+                           width="96.0" height="60.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 6.6px;">
+
+                    <div class="block-header">
+                        DataNode 30
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area scroll-active">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">layer</td>
+                                    <td class="val">4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">status</td>
+                                    <td class="val">Overflow</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">version</td>
+                                    <td class="val">1.0.4</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">author</td>
+                                    <td class="val">Kolega3</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">created</td>
+                                    <td class="val">2026-02-25</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">checksum</td>
+                                    <td class="val">AX-992</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">metadata</td>
+                                    <td class="val">hidden_data</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">last_log</td>
+                                    <td class="val">success</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+    </svg>
+</body>
+</html>

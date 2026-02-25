@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .block-container {
+            border: 1px solid #333;
+            background-color: #fff;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .block-header {
+            background-color: #34495e;
+            color: white;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .attr-table td {
+            border-bottom: 1px solid #eee;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
+        .key { font-weight: bold; color: #555; }
+        .val { color: #000; text-align: right; }
+        line { stroke: #333; }
+
+        /* DECORATOR STYLES */
+        .attr-scroll-area {
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
+
+        .scroll-active {
+            overflow-y: auto; /* Scroll active only by class */
+        }
+
+        /* Nice scroll for small elements */
+        .scroll-active::-webkit-scrollbar { width: 4px; }
+        .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <svg width="1000" height="600" style="background: #fafafa; border: 1px solid #eee;">
+        <defs>
+            
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                refX="83.0" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+            </marker>
+        </defs>
+
+        <!-- Edges -->
+        
+            
+            
+            <line x1="250.0" y1="300.0"
+                  x2="500.0" y2="120.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="300.0"
+                  x2="500.0" y2="240.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="300.0"
+                  x2="500.0" y2="360.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="250.0" y1="300.0"
+                  x2="500.0" y2="480.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="240.0"
+                  x2="750.0" y2="300.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="500.0" y1="360.0"
+                  x2="750.0" y2="300.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+
+        <!-- Nodes as Blocks -->
+        
+            
+            <foreignObject x="178.0" y="255.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:1
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                <tr>
+                                    <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
+                                        No attributes
+                                    </td>
+                                </tr>
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="428.0" y="75.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:2
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">22</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="428.0" y="195.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:3
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">33</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="428.0" y="315.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:4
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">44</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="428.0" y="435.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:5
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">55</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+            
+            <foreignObject x="678.0" y="255.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">
+                        id:6
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area ">
+                        <table class="attr-table">
+                            
+                                <tr>
+                                    <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
+                                        No attributes
+                                    </td>
+                                </tr>
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+    </svg>
+</body>
+</html>

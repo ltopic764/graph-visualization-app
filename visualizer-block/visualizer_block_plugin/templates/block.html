@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .block-container {
+            border: 1px solid #333;
+            background-color: #fff;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .block-header {
+            background-color: #34495e;
+            color: white;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .attr-table td {
+            border-bottom: 1px solid #eee;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
+        .key { font-weight: bold; color: #555; }
+        .val { color: #000; text-align: right; }
+        line { stroke: #333; }
+
+        /* DECORATOR STYLES */
+        .attr-scroll-area {
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
+
+        .scroll-active {
+            overflow-y: auto; /* Scroll active only by class */
+        }
+
+        /* Nice scroll for small elements */
+        .scroll-active::-webkit-scrollbar { width: 4px; }
+        .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <svg width="{{ width }}" height="{{ height }}" style="background: #fafafa; border: 1px solid #eee;">
+        <defs>
+            {# Dodajemo malu marginu (+3) da strelica ne dodiruje samu ivicu teksta #}
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                refX="{{ (block_w / scale) / 2 + 3 }}" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+            </marker>
+        </defs>
+
+        <!-- Edges -->
+        {% for edge in edges %}
+            {% set src = positions[edge.source] %}
+            {% set dst = positions[edge.target] %}
+            <line x1="{{ src.x }}" y1="{{ src.y }}"
+                  x2="{{ dst.x }}" y2="{{ dst.y }}"
+                  stroke-width="{{ 1.5 * scale }}"
+                  {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
+        {% endfor %}
+
+        <!-- Nodes as Blocks -->
+        {% for node in nodes %}
+            {% set pos = positions[node.node_id] %}
+            <foreignObject x="{{ pos.top_x }}" y="{{ pos.top_y }}"
+                           width="{{ block_w }}" height="{{ block_h }}">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: {{ font_size }}px;">
+
+                    <div class="block-header">
+                        {{ node.label if node.label else node.node_id }}
+                    </div>
+
+                    <!-- Decorator logic -->
+                    <div class="attr-scroll-area {{ 'scroll-active' if node.needs_scroll else '' }}">
+                        <table class="attr-table">
+                            {% if node.attributes %}
+                                {% for key, value in node.attributes.items() %}
+                                <tr>
+                                    <td class="key">{{ key }}</td>
+                                    <td class="val">{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
+                                        No attributes
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        {% endfor %}
+    </svg>
+</body>
+</html>
