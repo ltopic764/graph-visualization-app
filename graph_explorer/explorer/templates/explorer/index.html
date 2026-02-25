@@ -113,6 +113,10 @@
     <main id="main-content" class="main-content">
         <section id="main-view-panel" class="panel main-panel">
             <h2 class="panel-title">Main View</h2>
+            <div id="graph-fetch-status" class="graph-fetch-status is-hidden" role="status" aria-live="polite">
+                <p id="graph-fetch-status-message" class="graph-fetch-status-message"></p>
+                <button id="graph-fetch-retry-button" type="button" class="placeholder-button secondary-button" hidden>Retry</button>
+            </div>
             <div id="main-view-content" class="panel-body placeholder-box render-surface">
                 {{ placeholder_message }}
                 <p>TODO: plugin render output will be injected here</p>

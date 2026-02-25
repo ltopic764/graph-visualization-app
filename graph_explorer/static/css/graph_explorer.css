@@ -278,6 +278,52 @@ body {
     min-height: 420px;
 }
 
+.graph-fetch-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #f7fbff;
+    color: #35506b;
+    padding: 0.45rem 0.55rem;
+}
+
+.graph-fetch-status.is-hidden {
+    display: none !important;
+}
+
+.graph-fetch-status-message {
+    margin: 0;
+    font-size: 0.83rem;
+    line-height: 1.3;
+}
+
+.graph-fetch-status.is-idle {
+    border-color: #d2dce7;
+    background: #f7fbff;
+    color: #35506b;
+}
+
+.graph-fetch-status.is-loading {
+    border-color: #bdd2e8;
+    background: #edf5ff;
+    color: #1d4f83;
+}
+
+.graph-fetch-status.is-success {
+    border-color: #bfdcc8;
+    background: #eefaf2;
+    color: #1f662f;
+}
+
+.graph-fetch-status.is-error {
+    border-color: #e3b9bd;
+    background: #fff1f2;
+    color: #8f2a32;
+}
+
 .render-surface {
     display: block;
     text-align: left;
