@@ -73,19 +73,59 @@ body {
     color: var(--muted);
 }
 
+.toolbar-feedback {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.secondary-button {
+    background: #f5f8fb;
+}
+
 .tags-row #applied-query-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
+    min-height: 1.85rem;
 }
 
 .query-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     border: 1px solid #bfd2ea;
     background: #eaf3ff;
     color: #19467d;
     border-radius: 999px;
-    padding: 0.2rem 0.55rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.55rem;
     font-size: 0.8rem;
+}
+
+.query-tag-label {
+    line-height: 1.2;
+}
+
+.query-tag-remove {
+    border: 1px solid #9ab9dd;
+    border-radius: 999px;
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    font-size: 0.72rem;
+    line-height: 1;
+    color: #1a4f8d;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+.query-tag-remove:hover {
+    background: #dbeafc;
 }
 
 .sidebar {

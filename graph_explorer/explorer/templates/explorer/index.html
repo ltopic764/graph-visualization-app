@@ -11,13 +11,24 @@
 
         <section id="search-area" class="toolbar-group">
             <h2 class="group-title">Search</h2>
-            <input type="text" placeholder="Search nodes or edges" aria-label="Search placeholder">
+            <input
+                id="search-input"
+                type="text"
+                placeholder="Search nodes or edges"
+                aria-label="Search text"
+            >
+            <p id="search-preview" class="toolbar-feedback">Current search: none</p>
         </section>
 
         <section id="filter-area" class="toolbar-group">
             <h2 class="group-title">Filters</h2>
-            <input type="text" placeholder="Filter key" aria-label="Filter key placeholder">
-            <select aria-label="Filter operator placeholder">
+            <input
+                id="filter-attribute-input"
+                type="text"
+                placeholder="Filter key"
+                aria-label="Filter attribute"
+            >
+            <select id="filter-operator-select" aria-label="Filter operator">
                 <option>==</option>
                 <option>!=</option>
                 <option>&gt;</option>
@@ -25,16 +36,23 @@
                 <option>&lt;</option>
                 <option>&lt;=</option>
             </select>
-            <input type="text" placeholder="Filter value" aria-label="Filter value placeholder">
-            <button type="button" class="placeholder-button">Apply</button>
+            <input
+                id="filter-value-input"
+                type="text"
+                placeholder="Filter value"
+                aria-label="Filter value"
+            >
+            <div class="toolbar-actions">
+                <button id="apply-query-button" type="button" class="placeholder-button">Apply</button>
+                <button id="clear-query-state-button" type="button" class="placeholder-button secondary-button">Clear</button>
+            </div>
         </section>
 
         <section id="applied-queries-area" class="toolbar-group tags-row">
             <h2 class="group-title">Applied Queries</h2>
-            <div id="applied-query-tags">
-                <span class="query-tag">status:active</span>
-                <span class="query-tag">type:block</span>
-            </div>
+            <p id="applied-query-count" class="toolbar-feedback">0 applied</p>
+            <div id="applied-query-tags" aria-live="polite"></div>
+            <p id="applied-query-empty" class="toolbar-feedback">No applied queries</p>
         </section>
     </header>
 
