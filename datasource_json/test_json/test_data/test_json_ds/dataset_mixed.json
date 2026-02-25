@@ -1,0 +1,42 @@
+[
+  {
+    "id": "proj_A",
+    "name": "Project Alpha",
+    "tasks": [
+      {
+        "id": "t_A1",
+        "name": "Design DB",
+        "status": "Done"
+      },
+      {
+        "id": "t_A2",
+        "name": "Develop API",
+        "status": "In Progress",
+        "depends_on": "t_A1"
+      },
+      {
+        "id": "t_A3",
+        "name": "Testing",
+        "status": "Todo",
+        "depends_on": "t_A2"
+      }
+    ]
+  },
+  {
+    "id": "proj_B",
+    "name": "Project Beta",
+    "tasks": [
+      {
+        "id": "t_B1",
+        "name": "Frontend Setup",
+        "status": "Done"
+      },
+      {
+        "id": "t_B2",
+        "name": "Integrate API",
+        "status": "Blocked",
+        "depends_on": "t_A2"
+      }
+    ]
+  }
+]

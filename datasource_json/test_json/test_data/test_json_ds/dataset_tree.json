@@ -1,0 +1,49 @@
+{
+  "label": "CEO",
+  "position": "Chief Executive",
+  "children": [
+    {
+      "label": "VP Engineering",
+      "department": "Tech",
+      "children": [
+        {
+          "label": "Backend Lead",
+          "tech": "Python"
+        },
+        {
+          "label": "Frontend Lead",
+          "tech": "React"
+        },
+        {
+          "label": "DevOps Lead",
+          "tech": "Docker"
+        }
+      ]
+    },
+    {
+      "label": "VP Sales",
+      "department": "Business",
+      "children": [
+        {
+          "label": "Sales Manager EU",
+          "target": "1M"
+        },
+        {
+          "label": "Sales Manager US",
+          "target": "2M"
+        }
+      ]
+    },
+    {
+      "label": "HR Head",
+      "children": [
+        {
+          "label": "Recruiter 1"
+        },
+        {
+          "label": "Recruiter 2"
+        }
+      ]
+    }
+  ]
+}
