@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
-from graph_api.model import Graph
+from api.graph_api.model import Graph
 
 
 class DataSourcePlugin(ABC):
@@ -26,5 +26,5 @@ class DataSourcePlugin(ABC):
         return None
 
     @abstractmethod
-    def load_graph(self, source: Any, **options: Any) -> "Graph":
+    def load_graph(self, source: Any, **options: Any) -> Graph:
         """Load and return a graph object from the provided source."""
