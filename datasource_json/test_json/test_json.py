@@ -1,128 +1,71 @@
 import os
-import json
-from api.graph_api.model import Graph
+import sys
 
-from datasource_json.datasource_json_plugin.plugin import JsonDatasourcePlugin
-
-TEST_DIR = "test_data/test_json_ds"
-if not os.path.exists(TEST_DIR):
-    os.makedirs(TEST_DIR)
-
-data_tree = {
-    "label": "CEO",
-    "position": "Chief Executive",
-    "children": [
-        {
-            "label": "VP Engineering",
-            "department": "Tech",
-            "children": [
-                {"label": "Backend Lead", "tech": "Python"},
-                {"label": "Frontend Lead", "tech": "React"},
-                {"label": "DevOps Lead", "tech": "Docker"}
-            ]
-        },
-        {
-            "label": "VP Sales",
-            "department": "Business",
-            "children": [
-                {"label": "Sales Manager EU", "target": "1M"},
-                {"label": "Sales Manager US", "target": "2M"}
-            ]
-        },
-        {
-            "label": "HR Head",
-            "children": [
-                {"label": "Recruiter 1"},
-                {"label": "Recruiter 2"}
-            ]
-        }
-    ]
-}
-
-data_cyclic = [
-    {"id": "u1", "name": "Marko", "best_friend": "u2", "colleague": "u3"},
-    {"id": "u2", "name": "Jovan", "best_friend": "u1", "manager": "u3"},
-    {"id": "u3", "name": "Ana", "subordinate": "u2", "subordinate": "u4"},
-    {"id": "u4", "name": "Milica", "sister": "u5"},
-    {"id": "u5", "name": "Petar", "brother": "u4"},
-    {"id": "u6", "name": "Zoran", "neighbor": "u1"},
-    {"id": "u7", "name": "Ivana", "colleague": "u6"},
-    {"id": "u8", "name": "Dejan", "manager": "u7"},
-    {"id": "u9", "name": "Sonja", "team_lead": "u8"},
-    {"id": "u10", "name": "Luka", "mentor": "u9"}
-]
-
-data_mixed = [
-    {
-        "id": "proj_A",
-        "name": "Project Alpha",
-        "tasks": [
-            {"id": "t_A1", "name": "Design DB", "status": "Done"},
-            {"id": "t_A2", "name": "Develop API", "status": "In Progress", "depends_on": "t_A1"},
-            {"id": "t_A3", "name": "Testing", "status": "Todo", "depends_on": "t_A2"}
-        ]
-    },
-    {
-        "id": "proj_B",
-        "name": "Project Beta",
-        "tasks": [
-            {"id": "t_B1", "name": "Frontend Setup", "status": "Done"},
-            {"id": "t_B2", "name": "Integrate API", "status": "Blocked", "depends_on": "t_A2"}
-        ]
-    }
-]
-
-files_map = {
-    "dataset_tree.json": data_tree,
-    "dataset_cyclic.json": data_cyclic,
-    "dataset_mixed.json": data_mixed
-}
-
-for filename, content in files_map.items():
-    path = os.path.join(TEST_DIR, filename)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, indent=2)
-
-print("\n--- Running tests ---\n")
-plugin = JsonDatasourcePlugin()
-
-def print_graph_stats(name: str, graph: Graph):
-    print(f" REPORT: {name}")
-    print(f"   Nodes: {len(graph.nodes)}")
-    print(f"   Edges: {len(graph.edges)}")
-
-    print("   Sample Nodes:")
-    for n in graph.nodes[:3]:
-        attrs = {k: v for k, v in n.attributes.items() if k != 'children' and k != 'tasks'}
-        print(f"    - [{n.node_id}] {n.label} | Attrs: {attrs}")
-
-    print("   Sample Edges:")
-    for e in graph.edges[:3]:
-        label_info = e.attributes.get('label', 'unknown') if e.attributes else 'unknown'
-        print(f"    - {e.source} -> {e.target} (Type: {label_info})")
-    print("-" * 50)
-
-
-# TEST 1: Tree
 try:
-    path = os.path.join(TEST_DIR, "dataset_tree.json")
-    graph = plugin.load_graph(path)
-    print_graph_stats("TREE STRUCTURE (dataset_tree.json)", graph)
-except Exception as e:
-    print(f"Tree test error: {e}")
+    from datasource_json.datasource_json_plugin.plugin import JsonDatasourcePlugin
+except ImportError:
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from datasource_json.datasource_json_plugin.plugin import JsonDatasourcePlugin
 
-# TEST 2: Cyclic
-try:
-    path = os.path.join(TEST_DIR, "dataset_cyclic.json")
-    graph = plugin.load_graph(path)
-    print_graph_stats("CYCLIC FLAT LIST (dataset_cyclic.json)", graph)
-except Exception as e:
-    print(f"Cyclic test error: {e}")
 
-# TEST 3: Mixed
-try:
-    path = os.path.join(TEST_DIR, "dataset_mixed.json")
-    graph = plugin.load_graph(path)
-    print_graph_stats("MIXED COMPLEX (dataset_mixed.json)", graph)
-except Exception as e:
-    print(f"Mixed testa error: {e}")
+def inspect_graph(title, graph):
+    print("=" * 70)
+    print(f"JSON TEST: {title}")
+    print("=" * 70)
+
+    print(f"Statistic:")
+    print(f"   - Nodes: {len(graph.nodes)}")
+    print(f"   - Edges:   {len(graph.edges)}")
+
+    print(f"\nNodes sample:")
+    for i, node in enumerate(graph.nodes[:3]):
+        attrs = node.attributes
+        details = []
+
+        if 'status' in attrs: details.append(f"Status: {attrs['status']}")
+        if 'priority' in attrs: details.append(f"Priority: {attrs['priority']}")
+
+        if 'type' in attrs: details.append(f"Type: {attrs['type']}")
+        if 'ip' in attrs: details.append(f"IP: {attrs['ip']}")
+        if 'load' in attrs: details.append(f"Load: {attrs['load']}%")
+
+        print(f"   {i + 1}. [{node.node_id}] {node.label}")
+        print(f"       └── {', '.join(details)}")
+
+    print(f"\nEdge sample:")
+    if not graph.edges:
+        print("   (No edges)")
+    else:
+        for i, edge in enumerate(graph.edges[:5]):
+            etype = edge.attributes.get('type') or edge.attributes.get('label')
+            extra = ""
+            if 'latency' in edge.attributes: extra = f" ({edge.attributes['latency']})"
+
+            print(f"   {i + 1}. {edge.source} --[{etype}{extra}]--> {edge.target}")
+    print("\n")
+
+
+def main():
+    plugin = JsonDatasourcePlugin()
+    data_dir = "test_data/test_data_json"
+
+    # 1. Acyclic
+    try:
+        path = os.path.join(data_dir, "graph_220_acyclic.json")
+        g = plugin.load_graph(path)
+        inspect_graph("Acyclic (Project Management)", g)
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # 2. Cyclic
+    try:
+        path = os.path.join(data_dir, "graph_220_cyclic.json")
+        g = plugin.load_graph(path)
+        inspect_graph("Cyclic (Server Network)", g)
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
+    
