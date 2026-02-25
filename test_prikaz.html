@@ -3,134 +3,262 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        .node circle { stroke: #333; stroke-width: 1px; transition: fill 0.3s; }
-        .node:hover circle { fill: #ff9800; cursor: pointer; }
-        .edge-line { stroke: #999; stroke-opacity: 0.6; }
+        .block-container {
+            border: 1px solid #333;
+            background-color: #fff;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .block-header {
+            background-color: #34495e;
+            color: white;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .attr-table td {
+            border-bottom: 1px solid #eee;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
+        .key { font-weight: bold; color: #555; }
+        .val { color: #000; text-align: right; }
+        line { stroke: #333; }
     </style>
 </head>
 <body>
-    
-    <div class="graph-container">
-        <svg width="800" height="600" style="background: #fafafa; border: 1px solid #eee;">
-            <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7"
-                        refX="22.0" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
-                </marker>
-            </defs>
+    <svg width="800" height="600" style="background: #fafafa; border: 1px solid #eee;">
+        <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                refX="69.2" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+            </marker>
+        </defs>
 
+        <!-- Edges -->
+        
             
-                
-                
-                <line x1="200.0" y1="300.0"
-                      x2="400.0" y2="120.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
             
-                
-                
-                <line x1="200.0" y1="300.0"
-                      x2="400.0" y2="240.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
+            <line x1="200.0" y1="300.0"
+                  x2="400.0" y2="120.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
             
-                
-                
-                <line x1="200.0" y1="300.0"
-                      x2="400.0" y2="360.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
             
-                
-                
-                <line x1="200.0" y1="300.0"
-                      x2="400.0" y2="480.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
+            <line x1="200.0" y1="300.0"
+                  x2="400.0" y2="240.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
             
-                
-                
-                <line x1="400.0" y1="240.0"
-                      x2="600.0" y2="300.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
             
-                
-                
-                <line x1="400.0" y1="360.0"
-                      x2="600.0" y2="300.0"
-                      stroke="#333" stroke-width="1.88"
-                      marker-end="url(#arrowhead)" />
+            <line x1="200.0" y1="300.0"
+                  x2="400.0" y2="360.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
             
+            
+            <line x1="200.0" y1="300.0"
+                  x2="400.0" y2="480.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="400.0" y1="240.0"
+                  x2="600.0" y2="300.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
+            
+            
+            <line x1="400.0" y1="360.0"
+                  x2="600.0" y2="300.0"
+                  stroke-width="1.35"
+                   marker-end="url(#arrowhead)"  />
+        
 
+        <!-- Nodes as Blocks -->
+        
             
-                
-                <g class="node" id="node-1">
-                    <circle cx="200.0" cy="300.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="200.0" y="303.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:1
-                    </text>
-                </g>
+            <foreignObject x="128.0" y="255.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">1</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                <tr>
+                                    <td colspan="2" style="text-align:center; color: #999;">No attributes</td>
+                                </tr>
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
             
-                
-                <g class="node" id="node-2">
-                    <circle cx="400.0" cy="120.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="400.0" y="123.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:2
-                    </text>
-                </g>
+            <foreignObject x="328.0" y="75.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">2</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">22</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
             
-                
-                <g class="node" id="node-3">
-                    <circle cx="400.0" cy="240.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="400.0" y="243.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:3
-                    </text>
-                </g>
+            <foreignObject x="328.0" y="195.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">3</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">33</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
             
-                
-                <g class="node" id="node-4">
-                    <circle cx="400.0" cy="360.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="400.0" y="363.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:4
-                    </text>
-                </g>
+            <foreignObject x="328.0" y="315.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">4</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">44</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
             
-                
-                <g class="node" id="node-5">
-                    <circle cx="400.0" cy="480.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="400.0" y="483.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:5
-                    </text>
-                </g>
+            <foreignObject x="328.0" y="435.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">5</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                
+                                <tr>
+                                    <td class="key">name</td>
+                                    <td class="val">node</td>
+                                </tr>
+                                
+                                <tr>
+                                    <td class="key">number2</td>
+                                    <td class="val">55</td>
+                                </tr>
+                                
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
             
-                
-                <g class="node" id="node-6">
-                    <circle cx="600.0" cy="300.0" r="23.5"
-                            fill="white" stroke="black" stroke-width="2" />
-                    <text x="600.0" y="303.76"
-                          text-anchor="middle" font-family="Arial"
-                          font-size="11.28px" font-weight="bold">
-                        id:6
-                    </text>
-                </g>
-            
-        </svg>
-    </div>
+            <foreignObject x="528.0" y="255.0"
+                           width="144.0" height="90.0">
+
+                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                     style="font-size: 9.9px;">
+
+                    <div class="block-header">6</div>
+
+                    <div style="flex: 1; overflow-y: auto;">
+                        
+                        <table class="attr-table">
+                            
+                                <tr>
+                                    <td colspan="2" style="text-align:center; color: #999;">No attributes</td>
+                                </tr>
+                            
+                        </table>
+                    </div>
+                </div>
+            </foreignObject>
+        
+    </svg>
 </body>
 </html>

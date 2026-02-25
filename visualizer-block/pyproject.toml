@@ -5,10 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "visualizer-block-plugin"
 version = "0.1.0"
-description = "Placeholder block visualizer plugin package"
+description = "Detailed block visualizer plugin for graph visualization"
 requires-python = ">=3.11"
-dependencies = []
+
+dependencies = [
+    "graph-api",
+    "jinja2"
+]
+
+# Group "graph.visualizers"
+[project.entry-points."graph.visualizers"]
+block = "visualizer_block_plugin.plugin:BlockVisualizer"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["visualizer_block_plugin*"]
+
+[tool.setuptools.package-data]
+"visualizer_block_plugin.templates" = ["*.html"]

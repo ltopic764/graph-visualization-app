@@ -12,10 +12,10 @@
     {# You can change measurements for width and height of container as you wish, but then you need to
     adjust them in the plugin accordingly #}
     <div class="graph-container">
-        <svg width="800" height="600" style="background: #fafafa; border: 1px solid #eee;">
+        <svg width="{{ width }}" height="{{ height }}" style="background: #fafafa; border: 1px solid #eee;">
             <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7"
-                        refX="{{ radius / scale - 3}}" refY="3.5" orient="auto">
+                        refX="{{ radius / scale + 1 }}" refY="3.5" orient="auto">
                     <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
                 </marker>
             </defs>
@@ -26,7 +26,9 @@
                 <line x1="{{ src.x }}" y1="{{ src.y }}"
                       x2="{{ dst.x }}" y2="{{ dst.y }}"
                       stroke="#333" stroke-width="{{ 2 * scale }}"
-                      marker-end="url(#arrowhead)" />
+                      {% if directed %}
+                        marker-end="url(#arrowhead)"
+                      {% endif %} />
             {% endfor %}
 
             {% for node in nodes %}
@@ -37,7 +39,7 @@
                     <text x="{{ pos.x }}" y="{{ pos.y + (font_size/3) }}"
                           text-anchor="middle" font-family="Arial"
                           font-size="{{ font_size }}px" font-weight="bold">
-                        {{ node.label }}
+                        id: {{ node.node_id }}
                     </text>
                 </g>
             {% endfor %}
