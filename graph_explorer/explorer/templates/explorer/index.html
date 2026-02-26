@@ -63,6 +63,10 @@
                 <button type="button" class="tab-button active" data-visualizer="simple" aria-selected="true">Simple view</button>
                 <button type="button" class="tab-button" data-visualizer="block" aria-selected="false">Block view</button>
             </div>
+            <label class="direction-toggle" for="directed-toggle">
+                <input id="directed-toggle" type="checkbox" checked>
+                <span>Directed</span>
+            </label>
             <p id="visualizer-panel-note" class="panel-note">Active visualizer: simple</p>
         </section>
 
@@ -118,8 +122,13 @@
                 <button id="graph-fetch-retry-button" type="button" class="placeholder-button secondary-button" hidden>Retry</button>
             </div>
             <div id="main-view-content" class="panel-body placeholder-box render-surface">
-                {{ placeholder_message }}
-                <p>TODO: plugin render output will be injected here</p>
+                <p id="main-view-render-status" class="view-meta"></p>
+                <p id="main-view-render-error" class="empty-note" hidden></p>
+                <div id="main-view-visualizer-output" class="main-view-visualizer-output" hidden></div>
+                <div id="main-view-fallback-content" class="main-view-fallback-content">
+                    {{ placeholder_message }}
+                    <p>TODO: plugin render output will be injected here</p>
+                </div>
             </div>
         </section>
     </main>

@@ -1,6 +1,19 @@
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BASE_DIR.parent
+
+for extra_path in (
+    REPO_ROOT,
+    REPO_ROOT / "api",
+    REPO_ROOT / "visualizer_simple",
+    REPO_ROOT / "visualizer_block",
+):
+    extra_path_str = str(extra_path)
+    if extra_path_str not in sys.path:
+        # TODO: switch to finalized plugin/package loading strategy when registry wiring is complete.
+        sys.path.insert(0, extra_path_str)
 
 SECRET_KEY = "django-insecure-graph-explorer-placeholder-key"
 DEBUG = True
