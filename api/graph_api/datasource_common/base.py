@@ -51,9 +51,8 @@ class BaseDatasourcePlugin(DataSourcePlugin):
             # Get node id
             node_id = node_dict.get("id") or node_dict.get("@id")
             if not node_id:
-                # If parse step didn't give an id, skip (or you can generate here)
-                continue
-            node_id = str(node_id)
+                node_id = None
+            node_id = str(node_id) if node_id else None
 
             label = node_dict.get("label") or node_dict.get("name") or node_id
 
