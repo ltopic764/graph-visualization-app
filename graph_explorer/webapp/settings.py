@@ -7,6 +7,8 @@ REPO_ROOT = BASE_DIR.parent
 for extra_path in (
     REPO_ROOT,
     REPO_ROOT / "api",
+    REPO_ROOT / "datasource_json",
+    REPO_ROOT / "datasource_csv",
     REPO_ROOT / "visualizer_simple",
     REPO_ROOT / "visualizer_block",
 ):
