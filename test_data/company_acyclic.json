@@ -1,0 +1,1679 @@
+{
+  "id": "1",
+  "name": "CEO_Alice",
+  "age": 55,
+  "salary": 200000.0,
+  "hired": "2010-01-01",
+  "reports_to": [
+    {
+      "id": "2",
+      "name": "Director_2",
+      "age": 47,
+      "salary": 90530.0,
+      "hired": "2010-06-01",
+      "department": [
+        {
+          "id": "3",
+          "name": "Manager_3",
+          "age": 33,
+          "salary": 79969.0,
+          "hired": "2017-04-10",
+          "team": [
+            {
+              "id": "4",
+              "name": "Worker_4",
+              "age": 53,
+              "salary": 31397.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "5",
+              "name": "Worker_5",
+              "age": 31,
+              "salary": 32513.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "6",
+              "name": "Worker_6",
+              "age": 33,
+              "salary": 37108.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "7",
+              "name": "Worker_7",
+              "age": 39,
+              "salary": 31845.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "8",
+              "name": "Worker_8",
+              "age": 29,
+              "salary": 56520.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "9",
+              "name": "Worker_9",
+              "age": 34,
+              "salary": 38961.0,
+              "hired": "2020-07-15"
+            },
+            {
+              "id": "10",
+              "name": "Worker_10",
+              "age": 23,
+              "salary": 52321.0,
+              "hired": "2022-01-15"
+            },
+            {
+              "id": "11",
+              "name": "Worker_11",
+              "age": 53,
+              "salary": 46104.0,
+              "hired": "2021-09-15"
+            }
+          ]
+        },
+        {
+          "id": "12",
+          "name": "Manager_12",
+          "age": 50,
+          "salary": 75127.0,
+          "hired": "2015-08-10",
+          "team": [
+            {
+              "id": "13",
+              "name": "Worker_13",
+              "age": 48,
+              "salary": 58137.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "14",
+              "name": "Worker_14",
+              "age": 43,
+              "salary": 51577.0,
+              "hired": "2022-07-15"
+            },
+            {
+              "id": "15",
+              "name": "Worker_15",
+              "age": 39,
+              "salary": 40590.0,
+              "hired": "2020-07-15"
+            },
+            {
+              "id": "16",
+              "name": "Worker_16",
+              "age": 25,
+              "salary": 69669.0,
+              "hired": "2020-04-15"
+            },
+            {
+              "id": "17",
+              "name": "Worker_17",
+              "age": 34,
+              "salary": 51904.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "18",
+              "name": "Worker_18",
+              "age": 44,
+              "salary": 35129.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "19",
+              "name": "Worker_19",
+              "age": 52,
+              "salary": 57935.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "20",
+              "name": "Worker_20",
+              "age": 23,
+              "salary": 56488.0,
+              "hired": "2022-03-15"
+            }
+          ]
+        },
+        {
+          "id": "21",
+          "name": "Manager_21",
+          "age": 39,
+          "salary": 77532.0,
+          "hired": "2018-04-10",
+          "team": [
+            {
+              "id": "22",
+              "name": "Worker_22",
+              "age": 49,
+              "salary": 58011.0,
+              "hired": "2020-01-15"
+            },
+            {
+              "id": "23",
+              "name": "Worker_23",
+              "age": 31,
+              "salary": 65424.0,
+              "hired": "2020-08-15"
+            },
+            {
+              "id": "24",
+              "name": "Worker_24",
+              "age": 53,
+              "salary": 67218.0,
+              "hired": "2021-05-15"
+            },
+            {
+              "id": "25",
+              "name": "Worker_25",
+              "age": 46,
+              "salary": 33779.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "26",
+              "name": "Worker_26",
+              "age": 31,
+              "salary": 44261.0,
+              "hired": "2022-08-15"
+            },
+            {
+              "id": "27",
+              "name": "Worker_27",
+              "age": 24,
+              "salary": 62748.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "28",
+              "name": "Worker_28",
+              "age": 39,
+              "salary": 44126.0,
+              "hired": "2023-07-15"
+            },
+            {
+              "id": "29",
+              "name": "Worker_29",
+              "age": 37,
+              "salary": 54453.0,
+              "hired": "2023-07-15"
+            }
+          ]
+        },
+        {
+          "id": "30",
+          "name": "Manager_30",
+          "age": 43,
+          "salary": 68996.0,
+          "hired": "2018-07-10",
+          "team": [
+            {
+              "id": "31",
+              "name": "Worker_31",
+              "age": 44,
+              "salary": 65987.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "32",
+              "name": "Worker_32",
+              "age": 41,
+              "salary": 42706.0,
+              "hired": "2023-02-15"
+            },
+            {
+              "id": "33",
+              "name": "Worker_33",
+              "age": 51,
+              "salary": 31214.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "34",
+              "name": "Worker_34",
+              "age": 32,
+              "salary": 47436.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "35",
+              "name": "Worker_35",
+              "age": 45,
+              "salary": 65017.0,
+              "hired": "2020-08-15"
+            },
+            {
+              "id": "36",
+              "name": "Worker_36",
+              "age": 41,
+              "salary": 40051.0,
+              "hired": "2022-09-15"
+            },
+            {
+              "id": "37",
+              "name": "Worker_37",
+              "age": 44,
+              "salary": 37702.0,
+              "hired": "2020-07-15"
+            },
+            {
+              "id": "38",
+              "name": "Worker_38",
+              "age": 30,
+              "salary": 31445.0,
+              "hired": "2020-03-15"
+            }
+          ]
+        },
+        {
+          "id": "39",
+          "name": "Manager_39",
+          "age": 41,
+          "salary": 64500.0,
+          "hired": "2017-04-10",
+          "team": [
+            {
+              "id": "40",
+              "name": "Worker_40",
+              "age": 36,
+              "salary": 48555.0,
+              "hired": "2021-02-15"
+            },
+            {
+              "id": "41",
+              "name": "Worker_41",
+              "age": 48,
+              "salary": 66894.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "42",
+              "name": "Worker_42",
+              "age": 42,
+              "salary": 58722.0,
+              "hired": "2021-02-15"
+            },
+            {
+              "id": "43",
+              "name": "Worker_43",
+              "age": 32,
+              "salary": 38825.0,
+              "hired": "2023-04-15"
+            },
+            {
+              "id": "44",
+              "name": "Worker_44",
+              "age": 55,
+              "salary": 62338.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "45",
+              "name": "Worker_45",
+              "age": 35,
+              "salary": 65599.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "46",
+              "name": "Worker_46",
+              "age": 32,
+              "salary": 60933.0,
+              "hired": "2023-02-15"
+            },
+            {
+              "id": "47",
+              "name": "Worker_47",
+              "age": 42,
+              "salary": 46831.0,
+              "hired": "2021-07-15"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "48",
+      "name": "Director_48",
+      "age": 59,
+      "salary": 108871.0,
+      "hired": "2010-06-01",
+      "department": [
+        {
+          "id": "49",
+          "name": "Manager_49",
+          "age": 33,
+          "salary": 65517.0,
+          "hired": "2019-09-10",
+          "team": [
+            {
+              "id": "50",
+              "name": "Worker_50",
+              "age": 31,
+              "salary": 56847.0,
+              "hired": "2020-07-15"
+            },
+            {
+              "id": "51",
+              "name": "Worker_51",
+              "age": 28,
+              "salary": 51789.0,
+              "hired": "2021-06-15"
+            },
+            {
+              "id": "52",
+              "name": "Worker_52",
+              "age": 43,
+              "salary": 53449.0,
+              "hired": "2021-05-15"
+            },
+            {
+              "id": "53",
+              "name": "Worker_53",
+              "age": 55,
+              "salary": 63132.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "54",
+              "name": "Worker_54",
+              "age": 41,
+              "salary": 42662.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "55",
+              "name": "Worker_55",
+              "age": 30,
+              "salary": 59256.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "56",
+              "name": "Worker_56",
+              "age": 28,
+              "salary": 32971.0,
+              "hired": "2021-04-15"
+            },
+            {
+              "id": "57",
+              "name": "Worker_57",
+              "age": 23,
+              "salary": 57749.0,
+              "hired": "2020-05-15"
+            }
+          ]
+        },
+        {
+          "id": "58",
+          "name": "Manager_58",
+          "age": 33,
+          "salary": 69065.0,
+          "hired": "2018-09-10",
+          "team": [
+            {
+              "id": "59",
+              "name": "Worker_59",
+              "age": 34,
+              "salary": 42880.0,
+              "hired": "2021-04-15"
+            },
+            {
+              "id": "60",
+              "name": "Worker_60",
+              "age": 22,
+              "salary": 38437.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "61",
+              "name": "Worker_61",
+              "age": 32,
+              "salary": 51896.0,
+              "hired": "2020-07-15"
+            },
+            {
+              "id": "62",
+              "name": "Worker_62",
+              "age": 35,
+              "salary": 53820.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "63",
+              "name": "Worker_63",
+              "age": 41,
+              "salary": 54910.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "64",
+              "name": "Worker_64",
+              "age": 33,
+              "salary": 50899.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "65",
+              "name": "Worker_65",
+              "age": 37,
+              "salary": 52784.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "66",
+              "name": "Worker_66",
+              "age": 43,
+              "salary": 59406.0,
+              "hired": "2023-08-15"
+            }
+          ]
+        },
+        {
+          "id": "67",
+          "name": "Manager_67",
+          "age": 39,
+          "salary": 75670.0,
+          "hired": "2016-01-10",
+          "team": [
+            {
+              "id": "68",
+              "name": "Worker_68",
+              "age": 50,
+              "salary": 35610.0,
+              "hired": "2023-01-15"
+            },
+            {
+              "id": "69",
+              "name": "Worker_69",
+              "age": 46,
+              "salary": 69044.0,
+              "hired": "2022-01-15"
+            },
+            {
+              "id": "70",
+              "name": "Worker_70",
+              "age": 22,
+              "salary": 46754.0,
+              "hired": "2023-06-15"
+            },
+            {
+              "id": "71",
+              "name": "Worker_71",
+              "age": 38,
+              "salary": 39225.0,
+              "hired": "2023-06-15"
+            },
+            {
+              "id": "72",
+              "name": "Worker_72",
+              "age": 55,
+              "salary": 42837.0,
+              "hired": "2021-02-15"
+            },
+            {
+              "id": "73",
+              "name": "Worker_73",
+              "age": 48,
+              "salary": 38739.0,
+              "hired": "2023-06-15"
+            },
+            {
+              "id": "74",
+              "name": "Worker_74",
+              "age": 52,
+              "salary": 53753.0,
+              "hired": "2020-08-15"
+            },
+            {
+              "id": "75",
+              "name": "Worker_75",
+              "age": 36,
+              "salary": 49618.0,
+              "hired": "2020-03-15"
+            }
+          ]
+        },
+        {
+          "id": "76",
+          "name": "Manager_76",
+          "age": 48,
+          "salary": 74729.0,
+          "hired": "2017-09-10",
+          "team": [
+            {
+              "id": "77",
+              "name": "Worker_77",
+              "age": 30,
+              "salary": 69568.0,
+              "hired": "2022-01-15"
+            },
+            {
+              "id": "78",
+              "name": "Worker_78",
+              "age": 29,
+              "salary": 38929.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "79",
+              "name": "Worker_79",
+              "age": 45,
+              "salary": 35188.0,
+              "hired": "2023-08-15"
+            },
+            {
+              "id": "80",
+              "name": "Worker_80",
+              "age": 35,
+              "salary": 55290.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "81",
+              "name": "Worker_81",
+              "age": 32,
+              "salary": 69259.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "82",
+              "name": "Worker_82",
+              "age": 24,
+              "salary": 56269.0,
+              "hired": "2022-08-15"
+            },
+            {
+              "id": "83",
+              "name": "Worker_83",
+              "age": 23,
+              "salary": 53188.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "84",
+              "name": "Worker_84",
+              "age": 35,
+              "salary": 33325.0,
+              "hired": "2022-09-15"
+            }
+          ]
+        },
+        {
+          "id": "85",
+          "name": "Manager_85",
+          "age": 37,
+          "salary": 70655.0,
+          "hired": "2019-07-10",
+          "team": [
+            {
+              "id": "86",
+              "name": "Worker_86",
+              "age": 44,
+              "salary": 37718.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "87",
+              "name": "Worker_87",
+              "age": 52,
+              "salary": 31856.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "88",
+              "name": "Worker_88",
+              "age": 45,
+              "salary": 50222.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "89",
+              "name": "Worker_89",
+              "age": 44,
+              "salary": 55353.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "90",
+              "name": "Worker_90",
+              "age": 28,
+              "salary": 38431.0,
+              "hired": "2020-08-15"
+            },
+            {
+              "id": "91",
+              "name": "Worker_91",
+              "age": 44,
+              "salary": 55563.0,
+              "hired": "2021-04-15"
+            },
+            {
+              "id": "92",
+              "name": "Worker_92",
+              "age": 25,
+              "salary": 36213.0,
+              "hired": "2022-07-15"
+            },
+            {
+              "id": "93",
+              "name": "Worker_93",
+              "age": 47,
+              "salary": 69481.0,
+              "hired": "2023-08-15"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "94",
+      "name": "Director_94",
+      "age": 47,
+      "salary": 95846.0,
+      "hired": "2013-07-01",
+      "department": [
+        {
+          "id": "95",
+          "name": "Manager_95",
+          "age": 47,
+          "salary": 74765.0,
+          "hired": "2015-03-10",
+          "team": [
+            {
+              "id": "96",
+              "name": "Worker_96",
+              "age": 22,
+              "salary": 36028.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "97",
+              "name": "Worker_97",
+              "age": 44,
+              "salary": 65885.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "98",
+              "name": "Worker_98",
+              "age": 30,
+              "salary": 65315.0,
+              "hired": "2020-05-15"
+            },
+            {
+              "id": "99",
+              "name": "Worker_99",
+              "age": 28,
+              "salary": 36908.0,
+              "hired": "2022-01-15"
+            },
+            {
+              "id": "100",
+              "name": "Worker_100",
+              "age": 41,
+              "salary": 61974.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "101",
+              "name": "Worker_101",
+              "age": 38,
+              "salary": 49136.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "102",
+              "name": "Worker_102",
+              "age": 32,
+              "salary": 61504.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "103",
+              "name": "Worker_103",
+              "age": 27,
+              "salary": 64114.0,
+              "hired": "2022-09-15"
+            }
+          ]
+        },
+        {
+          "id": "104",
+          "name": "Manager_104",
+          "age": 42,
+          "salary": 81027.0,
+          "hired": "2016-02-10",
+          "team": [
+            {
+              "id": "105",
+              "name": "Worker_105",
+              "age": 34,
+              "salary": 62093.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "106",
+              "name": "Worker_106",
+              "age": 38,
+              "salary": 46649.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "107",
+              "name": "Worker_107",
+              "age": 40,
+              "salary": 44162.0,
+              "hired": "2021-04-15"
+            },
+            {
+              "id": "108",
+              "name": "Worker_108",
+              "age": 27,
+              "salary": 53411.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "109",
+              "name": "Worker_109",
+              "age": 30,
+              "salary": 30796.0,
+              "hired": "2022-09-15"
+            },
+            {
+              "id": "110",
+              "name": "Worker_110",
+              "age": 50,
+              "salary": 59099.0,
+              "hired": "2023-08-15"
+            },
+            {
+              "id": "111",
+              "name": "Worker_111",
+              "age": 53,
+              "salary": 40968.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "112",
+              "name": "Worker_112",
+              "age": 39,
+              "salary": 48342.0,
+              "hired": "2022-04-15"
+            }
+          ]
+        },
+        {
+          "id": "113",
+          "name": "Manager_113",
+          "age": 49,
+          "salary": 79155.0,
+          "hired": "2016-07-10",
+          "team": [
+            {
+              "id": "114",
+              "name": "Worker_114",
+              "age": 23,
+              "salary": 61137.0,
+              "hired": "2021-06-15"
+            },
+            {
+              "id": "115",
+              "name": "Worker_115",
+              "age": 31,
+              "salary": 57007.0,
+              "hired": "2023-07-15"
+            },
+            {
+              "id": "116",
+              "name": "Worker_116",
+              "age": 29,
+              "salary": 32248.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "117",
+              "name": "Worker_117",
+              "age": 36,
+              "salary": 40242.0,
+              "hired": "2020-06-15"
+            },
+            {
+              "id": "118",
+              "name": "Worker_118",
+              "age": 34,
+              "salary": 31175.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "119",
+              "name": "Worker_119",
+              "age": 53,
+              "salary": 36823.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "120",
+              "name": "Worker_120",
+              "age": 50,
+              "salary": 63976.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "121",
+              "name": "Worker_121",
+              "age": 36,
+              "salary": 30705.0,
+              "hired": "2021-05-15"
+            }
+          ]
+        },
+        {
+          "id": "122",
+          "name": "Manager_122",
+          "age": 50,
+          "salary": 66428.0,
+          "hired": "2018-03-10",
+          "team": [
+            {
+              "id": "123",
+              "name": "Worker_123",
+              "age": 22,
+              "salary": 60675.0,
+              "hired": "2020-01-15"
+            },
+            {
+              "id": "124",
+              "name": "Worker_124",
+              "age": 43,
+              "salary": 62430.0,
+              "hired": "2023-08-15"
+            },
+            {
+              "id": "125",
+              "name": "Worker_125",
+              "age": 39,
+              "salary": 41303.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "126",
+              "name": "Worker_126",
+              "age": 42,
+              "salary": 61030.0,
+              "hired": "2020-06-15"
+            },
+            {
+              "id": "127",
+              "name": "Worker_127",
+              "age": 35,
+              "salary": 45359.0,
+              "hired": "2023-06-15"
+            },
+            {
+              "id": "128",
+              "name": "Worker_128",
+              "age": 23,
+              "salary": 59080.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "129",
+              "name": "Worker_129",
+              "age": 23,
+              "salary": 48023.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "130",
+              "name": "Worker_130",
+              "age": 24,
+              "salary": 66814.0,
+              "hired": "2022-02-15"
+            }
+          ]
+        },
+        {
+          "id": "131",
+          "name": "Manager_131",
+          "age": 34,
+          "salary": 84025.0,
+          "hired": "2019-01-10",
+          "team": [
+            {
+              "id": "132",
+              "name": "Worker_132",
+              "age": 34,
+              "salary": 58821.0,
+              "hired": "2020-08-15"
+            },
+            {
+              "id": "133",
+              "name": "Worker_133",
+              "age": 27,
+              "salary": 55259.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "134",
+              "name": "Worker_134",
+              "age": 52,
+              "salary": 44637.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "135",
+              "name": "Worker_135",
+              "age": 46,
+              "salary": 46996.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "136",
+              "name": "Worker_136",
+              "age": 30,
+              "salary": 64178.0,
+              "hired": "2023-02-15"
+            },
+            {
+              "id": "137",
+              "name": "Worker_137",
+              "age": 52,
+              "salary": 40387.0,
+              "hired": "2022-07-15"
+            },
+            {
+              "id": "138",
+              "name": "Worker_138",
+              "age": 28,
+              "salary": 69069.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "139",
+              "name": "Worker_139",
+              "age": 49,
+              "salary": 43928.0,
+              "hired": "2021-03-15"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "140",
+      "name": "Director_140",
+      "age": 41,
+      "salary": 123389.0,
+      "hired": "2014-03-01",
+      "department": [
+        {
+          "id": "141",
+          "name": "Manager_141",
+          "age": 41,
+          "salary": 74134.0,
+          "hired": "2018-07-10",
+          "team": [
+            {
+              "id": "142",
+              "name": "Worker_142",
+              "age": 55,
+              "salary": 30261.0,
+              "hired": "2021-01-15"
+            },
+            {
+              "id": "143",
+              "name": "Worker_143",
+              "age": 42,
+              "salary": 30102.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "144",
+              "name": "Worker_144",
+              "age": 37,
+              "salary": 40268.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "145",
+              "name": "Worker_145",
+              "age": 29,
+              "salary": 67865.0,
+              "hired": "2023-01-15"
+            },
+            {
+              "id": "146",
+              "name": "Worker_146",
+              "age": 29,
+              "salary": 62781.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "147",
+              "name": "Worker_147",
+              "age": 32,
+              "salary": 39867.0,
+              "hired": "2023-09-15"
+            },
+            {
+              "id": "148",
+              "name": "Worker_148",
+              "age": 37,
+              "salary": 54899.0,
+              "hired": "2023-08-15"
+            },
+            {
+              "id": "149",
+              "name": "Worker_149",
+              "age": 26,
+              "salary": 46263.0,
+              "hired": "2022-04-15"
+            }
+          ]
+        },
+        {
+          "id": "150",
+          "name": "Manager_150",
+          "age": 33,
+          "salary": 68579.0,
+          "hired": "2019-05-10",
+          "team": [
+            {
+              "id": "151",
+              "name": "Worker_151",
+              "age": 45,
+              "salary": 68502.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "152",
+              "name": "Worker_152",
+              "age": 27,
+              "salary": 56135.0,
+              "hired": "2023-01-15"
+            },
+            {
+              "id": "153",
+              "name": "Worker_153",
+              "age": 37,
+              "salary": 52662.0,
+              "hired": "2020-06-15"
+            },
+            {
+              "id": "154",
+              "name": "Worker_154",
+              "age": 40,
+              "salary": 62431.0,
+              "hired": "2023-04-15"
+            },
+            {
+              "id": "155",
+              "name": "Worker_155",
+              "age": 23,
+              "salary": 35194.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "156",
+              "name": "Worker_156",
+              "age": 38,
+              "salary": 31667.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "157",
+              "name": "Worker_157",
+              "age": 37,
+              "salary": 34800.0,
+              "hired": "2020-05-15"
+            },
+            {
+              "id": "158",
+              "name": "Worker_158",
+              "age": 30,
+              "salary": 49353.0,
+              "hired": "2022-05-15"
+            }
+          ]
+        },
+        {
+          "id": "159",
+          "name": "Manager_159",
+          "age": 39,
+          "salary": 76872.0,
+          "hired": "2019-07-10",
+          "team": [
+            {
+              "id": "160",
+              "name": "Worker_160",
+              "age": 54,
+              "salary": 37533.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "161",
+              "name": "Worker_161",
+              "age": 47,
+              "salary": 50045.0,
+              "hired": "2020-01-15"
+            },
+            {
+              "id": "162",
+              "name": "Worker_162",
+              "age": 23,
+              "salary": 39988.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "163",
+              "name": "Worker_163",
+              "age": 26,
+              "salary": 36416.0,
+              "hired": "2021-02-15"
+            },
+            {
+              "id": "164",
+              "name": "Worker_164",
+              "age": 29,
+              "salary": 41085.0,
+              "hired": "2022-03-15"
+            },
+            {
+              "id": "165",
+              "name": "Worker_165",
+              "age": 43,
+              "salary": 51580.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "166",
+              "name": "Worker_166",
+              "age": 39,
+              "salary": 48214.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "167",
+              "name": "Worker_167",
+              "age": 24,
+              "salary": 38543.0,
+              "hired": "2021-09-15"
+            }
+          ]
+        },
+        {
+          "id": "168",
+          "name": "Manager_168",
+          "age": 45,
+          "salary": 85093.0,
+          "hired": "2015-01-10",
+          "team": [
+            {
+              "id": "169",
+              "name": "Worker_169",
+              "age": 52,
+              "salary": 59226.0,
+              "hired": "2023-02-15"
+            },
+            {
+              "id": "170",
+              "name": "Worker_170",
+              "age": 42,
+              "salary": 59853.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "171",
+              "name": "Worker_171",
+              "age": 37,
+              "salary": 39171.0,
+              "hired": "2022-06-15"
+            },
+            {
+              "id": "172",
+              "name": "Worker_172",
+              "age": 54,
+              "salary": 69680.0,
+              "hired": "2022-07-15"
+            },
+            {
+              "id": "173",
+              "name": "Worker_173",
+              "age": 35,
+              "salary": 69390.0,
+              "hired": "2021-09-15"
+            },
+            {
+              "id": "174",
+              "name": "Worker_174",
+              "age": 30,
+              "salary": 54010.0,
+              "hired": "2021-06-15"
+            },
+            {
+              "id": "175",
+              "name": "Worker_175",
+              "age": 54,
+              "salary": 48634.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "176",
+              "name": "Worker_176",
+              "age": 35,
+              "salary": 39990.0,
+              "hired": "2020-02-15"
+            }
+          ]
+        },
+        {
+          "id": "177",
+          "name": "Manager_177",
+          "age": 32,
+          "salary": 61266.0,
+          "hired": "2019-01-10",
+          "team": [
+            {
+              "id": "178",
+              "name": "Worker_178",
+              "age": 32,
+              "salary": 65945.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "179",
+              "name": "Worker_179",
+              "age": 40,
+              "salary": 32067.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "180",
+              "name": "Worker_180",
+              "age": 27,
+              "salary": 68956.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "181",
+              "name": "Worker_181",
+              "age": 41,
+              "salary": 47371.0,
+              "hired": "2023-01-15"
+            },
+            {
+              "id": "182",
+              "name": "Worker_182",
+              "age": 29,
+              "salary": 50478.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "183",
+              "name": "Worker_183",
+              "age": 32,
+              "salary": 43285.0,
+              "hired": "2023-07-15"
+            },
+            {
+              "id": "184",
+              "name": "Worker_184",
+              "age": 38,
+              "salary": 50361.0,
+              "hired": "2021-08-15"
+            },
+            {
+              "id": "185",
+              "name": "Worker_185",
+              "age": 54,
+              "salary": 45070.0,
+              "hired": "2021-01-15"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "186",
+      "name": "Director_186",
+      "age": 51,
+      "salary": 108879.0,
+      "hired": "2014-08-01",
+      "department": [
+        {
+          "id": "187",
+          "name": "Manager_187",
+          "age": 40,
+          "salary": 67016.0,
+          "hired": "2019-07-10",
+          "team": [
+            {
+              "id": "188",
+              "name": "Worker_188",
+              "age": 43,
+              "salary": 36990.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "189",
+              "name": "Worker_189",
+              "age": 25,
+              "salary": 51393.0,
+              "hired": "2022-09-15"
+            },
+            {
+              "id": "190",
+              "name": "Worker_190",
+              "age": 24,
+              "salary": 66802.0,
+              "hired": "2022-09-15"
+            },
+            {
+              "id": "191",
+              "name": "Worker_191",
+              "age": 39,
+              "salary": 40847.0,
+              "hired": "2022-01-15"
+            },
+            {
+              "id": "192",
+              "name": "Worker_192",
+              "age": 41,
+              "salary": 30791.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "193",
+              "name": "Worker_193",
+              "age": 23,
+              "salary": 54456.0,
+              "hired": "2023-05-15"
+            },
+            {
+              "id": "194",
+              "name": "Worker_194",
+              "age": 44,
+              "salary": 69837.0,
+              "hired": "2020-04-15"
+            },
+            {
+              "id": "195",
+              "name": "Worker_195",
+              "age": 51,
+              "salary": 52143.0,
+              "hired": "2021-05-15"
+            }
+          ]
+        },
+        {
+          "id": "196",
+          "name": "Manager_196",
+          "age": 45,
+          "salary": 63496.0,
+          "hired": "2018-05-10",
+          "team": [
+            {
+              "id": "197",
+              "name": "Worker_197",
+              "age": 43,
+              "salary": 43104.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "198",
+              "name": "Worker_198",
+              "age": 26,
+              "salary": 33631.0,
+              "hired": "2022-07-15"
+            },
+            {
+              "id": "199",
+              "name": "Worker_199",
+              "age": 28,
+              "salary": 41496.0,
+              "hired": "2020-05-15"
+            },
+            {
+              "id": "200",
+              "name": "Worker_200",
+              "age": 28,
+              "salary": 32824.0,
+              "hired": "2023-06-15"
+            },
+            {
+              "id": "201",
+              "name": "Worker_201",
+              "age": 39,
+              "salary": 37171.0,
+              "hired": "2023-07-15"
+            },
+            {
+              "id": "202",
+              "name": "Worker_202",
+              "age": 48,
+              "salary": 35089.0,
+              "hired": "2022-08-15"
+            },
+            {
+              "id": "203",
+              "name": "Worker_203",
+              "age": 55,
+              "salary": 56634.0,
+              "hired": "2023-09-15"
+            },
+            {
+              "id": "204",
+              "name": "Worker_204",
+              "age": 37,
+              "salary": 63219.0,
+              "hired": "2020-07-15"
+            }
+          ]
+        },
+        {
+          "id": "205",
+          "name": "Manager_205",
+          "age": 37,
+          "salary": 60774.0,
+          "hired": "2019-03-10",
+          "team": [
+            {
+              "id": "206",
+              "name": "Worker_206",
+              "age": 55,
+              "salary": 35329.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "207",
+              "name": "Worker_207",
+              "age": 38,
+              "salary": 49521.0,
+              "hired": "2020-04-15"
+            },
+            {
+              "id": "208",
+              "name": "Worker_208",
+              "age": 30,
+              "salary": 43195.0,
+              "hired": "2023-03-15"
+            },
+            {
+              "id": "209",
+              "name": "Worker_209",
+              "age": 50,
+              "salary": 65173.0,
+              "hired": "2023-09-15"
+            },
+            {
+              "id": "210",
+              "name": "Worker_210",
+              "age": 27,
+              "salary": 46388.0,
+              "hired": "2022-02-15"
+            },
+            {
+              "id": "211",
+              "name": "Worker_211",
+              "age": 25,
+              "salary": 39722.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "212",
+              "name": "Worker_212",
+              "age": 48,
+              "salary": 45162.0,
+              "hired": "2020-05-15"
+            },
+            {
+              "id": "213",
+              "name": "Worker_213",
+              "age": 25,
+              "salary": 33325.0,
+              "hired": "2022-07-15"
+            }
+          ]
+        },
+        {
+          "id": "214",
+          "name": "Manager_214",
+          "age": 46,
+          "salary": 73388.0,
+          "hired": "2017-08-10",
+          "team": [
+            {
+              "id": "215",
+              "name": "Worker_215",
+              "age": 53,
+              "salary": 66314.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "216",
+              "name": "Worker_216",
+              "age": 27,
+              "salary": 38331.0,
+              "hired": "2023-02-15"
+            },
+            {
+              "id": "217",
+              "name": "Worker_217",
+              "age": 55,
+              "salary": 36047.0,
+              "hired": "2023-07-15"
+            },
+            {
+              "id": "218",
+              "name": "Worker_218",
+              "age": 24,
+              "salary": 37157.0,
+              "hired": "2021-07-15"
+            },
+            {
+              "id": "219",
+              "name": "Worker_219",
+              "age": 47,
+              "salary": 41590.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "220",
+              "name": "Worker_220",
+              "age": 24,
+              "salary": 34624.0,
+              "hired": "2020-09-15"
+            },
+            {
+              "id": "221",
+              "name": "Worker_221",
+              "age": 47,
+              "salary": 44039.0,
+              "hired": "2020-01-15"
+            },
+            {
+              "id": "222",
+              "name": "Worker_222",
+              "age": 27,
+              "salary": 43813.0,
+              "hired": "2021-09-15"
+            }
+          ]
+        },
+        {
+          "id": "223",
+          "name": "Manager_223",
+          "age": 41,
+          "salary": 70405.0,
+          "hired": "2015-02-10",
+          "team": [
+            {
+              "id": "224",
+              "name": "Worker_224",
+              "age": 39,
+              "salary": 63556.0,
+              "hired": "2020-03-15"
+            },
+            {
+              "id": "225",
+              "name": "Worker_225",
+              "age": 45,
+              "salary": 46059.0,
+              "hired": "2022-05-15"
+            },
+            {
+              "id": "226",
+              "name": "Worker_226",
+              "age": 32,
+              "salary": 51075.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "227",
+              "name": "Worker_227",
+              "age": 33,
+              "salary": 37511.0,
+              "hired": "2020-02-15"
+            },
+            {
+              "id": "228",
+              "name": "Worker_228",
+              "age": 43,
+              "salary": 33971.0,
+              "hired": "2022-04-15"
+            },
+            {
+              "id": "229",
+              "name": "Worker_229",
+              "age": 22,
+              "salary": 61977.0,
+              "hired": "2021-05-15"
+            },
+            {
+              "id": "230",
+              "name": "Worker_230",
+              "age": 45,
+              "salary": 35933.0,
+              "hired": "2021-03-15"
+            },
+            {
+              "id": "231",
+              "name": "Worker_231",
+              "age": 43,
+              "salary": 69284.0,
+              "hired": "2021-03-15"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
