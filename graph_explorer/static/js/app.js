@@ -8,16 +8,26 @@
     const DEFAULT_FILTER_OPERATOR = "==";
     const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
     const GRAPH_FETCH_ENDPOINT = "/api/mock-graph/";
+    const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
     let graphFetchSuccessHideTimeoutId = null;
+    let visualizerRenderRequestSequence = 0;
 
     const state = {
         activeVisualizer: "simple",
+        isDirected: true,
         selectedNodeId: null,
         graph: EMPTY_GRAPH,
         graphFetchStatus: "idle",
         graphFetchErrorMessage: null,
         graphFetchLastLoadedAt: null,
+        visualizerRender: {
+            status: "idle",
+            errorMessage: null,
+            html: "",
+            renderedVisualizerId: null,
+            renderedIsDirected: null
+        },
         queryUI: {
             searchText: "",
             filterAttribute: "",
@@ -190,6 +200,17 @@
         }
         state.activeVisualizer = mode;
         renderAll();
+        loadVisualizerOutput();
+    }
+
+    function setDirectedMode(isDirected) {
+        const normalized = Boolean(isDirected);
+        if (state.isDirected === normalized) {
+            return;
+        }
+        state.isDirected = normalized;
+        renderAll();
+        loadVisualizerOutput();
     }
 
     function getToolbarElements() {
@@ -276,6 +297,88 @@
         refs.retryButton.addEventListener("click", function () {
             loadGraphData();
         });
+    }
+
+    function getMainViewElements() {
+        return {
+            status: document.getElementById("main-view-render-status"),
+            error: document.getElementById("main-view-render-error"),
+            output: document.getElementById("main-view-visualizer-output"),
+            fallback: document.getElementById("main-view-fallback-content")
+        };
+    }
+
+    function getVisualizerRenderErrorMessage(error) {
+        if (error && typeof error.message === "string" && error.message.trim()) {
+            return error.message.trim();
+        }
+        return "Unexpected error.";
+    }
+
+    function getVisualizerRenderStatusLabel() {
+        if (state.visualizerRender.status === "loading") {
+            return "Rendering...";
+        }
+        if (state.visualizerRender.status === "success") {
+            return `Rendered ${state.activeVisualizer} (${state.isDirected ? "directed" : "undirected"}).`;
+        }
+        return "";
+    }
+
+    function buildVisualizerRenderUrl(visualizerId, isDirected) {
+        const params = new URLSearchParams({
+            visualizer_id: visualizerId,
+            directed: isDirected ? "1" : "0"
+        });
+        return `${VISUALIZER_RENDER_ENDPOINT}?${params.toString()}`;
+    }
+
+    async function loadVisualizerOutput() {
+        const visualizerId = state.activeVisualizer;
+        const isDirected = state.isDirected;
+        const requestId = visualizerRenderRequestSequence + 1;
+        visualizerRenderRequestSequence = requestId;
+
+        state.visualizerRender.status = "loading";
+        state.visualizerRender.errorMessage = null;
+        state.visualizerRender.html = "";
+        state.visualizerRender.renderedVisualizerId = null;
+        state.visualizerRender.renderedIsDirected = null;
+        renderMainView();
+
+        try {
+            const response = await fetch(buildVisualizerRenderUrl(visualizerId, isDirected), {
+                headers: { Accept: "text/html" }
+            });
+            const html = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            if (requestId !== visualizerRenderRequestSequence) {
+                return;
+            }
+
+            state.visualizerRender.status = "success";
+            state.visualizerRender.errorMessage = null;
+            state.visualizerRender.html = html;
+            state.visualizerRender.renderedVisualizerId = visualizerId;
+            state.visualizerRender.renderedIsDirected = isDirected;
+            renderMainView();
+        } catch (error) {
+            if (requestId !== visualizerRenderRequestSequence) {
+                return;
+            }
+
+            state.visualizerRender.status = "error";
+            state.visualizerRender.errorMessage =
+                `Failed to render ${visualizerId} visualizer (${getVisualizerRenderErrorMessage(error)})`;
+            state.visualizerRender.html = "";
+            state.visualizerRender.renderedVisualizerId = null;
+            state.visualizerRender.renderedIsDirected = null;
+            renderMainView();
+        }
     }
 
     function pushConsoleHistory(command) {
@@ -587,9 +690,31 @@
         });
     }
 
+    function renderVisualizerIframe(container, html) {
+        if (!container) {
+            return;
+        }
+
+        let iframe = container.querySelector("#main-view-visualizer-iframe");
+        if (!iframe) {
+            iframe = document.createElement("iframe");
+            iframe.id = "main-view-visualizer-iframe";
+            iframe.title = "Main visualizer output";
+            iframe.setAttribute("loading", "lazy");
+            iframe.style.width = "100%";
+            iframe.style.height = "100%";
+            iframe.style.border = "0";
+            container.appendChild(iframe);
+        }
+
+        if (iframe.srcdoc !== html) {
+            iframe.srcdoc = html;
+        }
+    }
+
     function renderMainView() {
-        const mainView = document.getElementById("main-view-content");
-        if (!mainView) {
+        const refs = getMainViewElements();
+        if (!refs.fallback) {
             return;
         }
 
@@ -625,16 +750,44 @@
             }).join("")
             : "<li>No edges available in mock graph.</li>";
 
-        mainView.innerHTML = [
+        refs.fallback.innerHTML = [
             '<p class="view-meta"><strong>Main View placeholder</strong></p>',
             `<p class="view-meta">Active visualizer: <span class="visualizer-pill">${escapeHtml(state.activeVisualizer)}</span></p>`,
+            `<p class="view-meta">Direction: ${state.isDirected ? "Directed" : "Undirected"}</p>`,
             `<p class="view-meta">Nodes: ${nodes.length} | Edges: ${edges.length}</p>`,
             `<div class="node-cards">${nodeCards}</div>`,
             '<p class="view-meta"><strong>Edges</strong></p>',
             `<ul class="placeholder-list">${edgeRows}</ul>`
         ].join("");
 
-        bindMainNodeCardClicks(mainView);
+        bindMainNodeCardClicks(refs.fallback);
+
+        if (refs.status) {
+            const statusLabel = getVisualizerRenderStatusLabel();
+            refs.status.textContent = statusLabel;
+            refs.status.hidden = !statusLabel;
+        }
+
+        if (refs.error) {
+            const showError = state.visualizerRender.status === "error" && Boolean(state.visualizerRender.errorMessage);
+            refs.error.textContent = showError ? state.visualizerRender.errorMessage : "";
+            refs.error.hidden = !showError;
+        }
+
+        if (refs.output) {
+            const canRenderVisualizer =
+                state.visualizerRender.status === "success" &&
+                state.visualizerRender.renderedVisualizerId === state.activeVisualizer &&
+                state.visualizerRender.renderedIsDirected === state.isDirected &&
+                Boolean(state.visualizerRender.html);
+
+            refs.output.hidden = !canRenderVisualizer;
+            if (!canRenderVisualizer) {
+                refs.output.innerHTML = "";
+            } else {
+                renderVisualizerIframe(refs.output, state.visualizerRender.html);
+            }
+        }
     }
 
     function renderTreeView() {
@@ -711,7 +864,12 @@
 
         const panelNote = document.getElementById("visualizer-panel-note");
         if (panelNote) {
-            panelNote.textContent = `Active visualizer: ${state.activeVisualizer}`;
+            panelNote.textContent = `Active visualizer: ${state.activeVisualizer} (${state.isDirected ? "directed" : "undirected"})`;
+        }
+
+        const directedToggle = document.getElementById("directed-toggle");
+        if (directedToggle && directedToggle.checked !== state.isDirected) {
+            directedToggle.checked = state.isDirected;
         }
     }
 
@@ -723,6 +881,13 @@
                 setActiveVisualizer(visualizerId);
             });
         });
+
+        const directedToggle = document.getElementById("directed-toggle");
+        if (directedToggle) {
+            directedToggle.addEventListener("change", function (event) {
+                setDirectedMode(Boolean(event.target.checked));
+            });
+        }
     }
 
     function renderAll() {
@@ -742,6 +907,7 @@
         bindVisualizerTabClicks();
         bindGraphFetchControls();
         renderAll();
+        loadVisualizerOutput();
         loadGraphData();
     });
 })();

@@ -183,6 +183,23 @@ body {
     color: var(--muted);
 }
 
+.direction-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    font-size: 0.84rem;
+    color: #2e4860;
+    cursor: pointer;
+}
+
+.direction-toggle input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
 .console-panel-body {
     display: flex;
     flex-direction: column;
@@ -330,6 +347,27 @@ body {
     align-items: stretch;
     justify-content: flex-start;
     overflow: auto;
+}
+
+.main-view-visualizer-output {
+    height: 320px;
+    min-height: 220px;
+    border: 1px solid #c9d6e3;
+    border-radius: 6px;
+    background: #ffffff;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+}
+
+#main-view-visualizer-iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+}
+
+.main-view-fallback-content {
+    margin-top: 0.15rem;
 }
 
 .view-meta {

@@ -3,5 +3,6 @@
 # -r api/requirements.txt
 
 -e ./api
--e ./visualizer-simple
+-e ./visualizer_simple
+-e ./visualizer_block
 jinja2
