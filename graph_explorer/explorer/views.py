@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -75,6 +76,48 @@ def _json_error(message: str, status: int) -> JsonResponse:
     return JsonResponse({"ok": False, "error": message}, status=status)
 
 
+def json_error(
+    status_code: int,
+    error: str,
+    message: str,
+    expected: dict[str, object] | None = None,
+    details: object | None = None,
+) -> JsonResponse:
+    payload: dict[str, object] = {
+        "ok": False,
+        "status": status_code,
+        "error": error,
+        "message": message,
+    }
+    if expected is not None:
+        payload["expected"] = expected
+    if details is not None:
+        payload["details"] = details
+    return JsonResponse(payload, status=status_code)
+
+
+def _parse_json_body(request: HttpRequest) -> tuple[object | None, JsonResponse | None]:
+    if not request.body:
+        return None, json_error(400, "BadRequest", "Invalid JSON body.")
+
+    try:
+        body = request.body.decode("utf-8")
+        return json.loads(body), None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, json_error(400, "BadRequest", "Invalid JSON body.")
+
+
+def _require_post_json(request: HttpRequest) -> JsonResponse | None:
+    if request.method != "POST":
+        return json_error(
+            405,
+            "MethodNotAllowed",
+            "Only POST is allowed.",
+            details={"allowed_methods": ["POST"]},
+        )
+    return None
+
+
 def _build_datasource_map() -> dict[str, tuple[str, object | None, Exception | None]]:
     return {
         ".json": ("json", JsonDatasourcePlugin, JSON_DATASOURCE_IMPORT_ERROR),
@@ -121,6 +164,78 @@ def index(request: HttpRequest) -> HttpResponse:
 
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
+
+
+@csrf_exempt
+def cli_execute_api(request: HttpRequest) -> JsonResponse:
+    method_error = _require_post_json(request)
+    if method_error:
+        return method_error
+
+    _, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    return json_error(
+        status_code=501,
+        error="NotImplemented",
+        message="CLI command execution is not implemented yet.",
+        expected={"graph_id": "string|null", "command": "string"},
+    )
+
+
+@csrf_exempt
+def graph_search_api(request: HttpRequest) -> JsonResponse:
+    method_error = _require_post_json(request)
+    if method_error:
+        return method_error
+
+    _, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    return json_error(
+        status_code=501,
+        error="NotImplemented",
+        message="Search is not implemented yet.",
+        expected={"graph_id": "string", "query": "string"},
+    )
+
+
+@csrf_exempt
+def graph_filter_api(request: HttpRequest) -> JsonResponse:
+    method_error = _require_post_json(request)
+    if method_error:
+        return method_error
+
+    _, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    return json_error(
+        status_code=501,
+        error="NotImplemented",
+        message="Filtering is not implemented yet.",
+        expected={"graph_id": "string", "filters": "list of {key, op, value}"},
+    )
+
+
+@csrf_exempt
+def workspace_reset_api(request: HttpRequest) -> JsonResponse:
+    method_error = _require_post_json(request)
+    if method_error:
+        return method_error
+
+    _, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    return json_error(
+        status_code=501,
+        error="NotImplemented",
+        message="Workspace reset is not implemented yet.",
+        expected={"graph_id": "string|null"},
+    )
 
 
 @csrf_exempt

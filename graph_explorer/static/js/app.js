@@ -5,8 +5,10 @@
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
     const DEFAULT_FILTER_OPERATOR = "==";
-    const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
     const GRAPH_LOAD_ENDPOINT = "/api/graph/load";
+    const CLI_EXECUTE_ENDPOINT = "/api/cli/execute";
+    const GRAPH_SEARCH_ENDPOINT = "/api/graph/search";
+    const GRAPH_FILTER_ENDPOINT = "/api/graph/filter";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
     let graphFetchSuccessHideTimeoutId = null;
@@ -629,6 +631,54 @@
         }
     }
 
+    function normalizeBackendMessage(response, payload) {
+        if (payload && typeof payload.message === "string" && payload.message.trim()) {
+            return payload.message.trim();
+        }
+        if (payload && typeof payload.error === "string" && payload.error.trim()) {
+            return payload.error.trim();
+        }
+        if (response && typeof response.status === "number") {
+            return `Request failed (HTTP ${response.status}).`;
+        }
+        return "Request failed.";
+    }
+
+    async function postJsonRequest(endpoint, body) {
+        try {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(body)
+            });
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            return {
+                ok: response.ok,
+                response: response,
+                payload: payload,
+                message: normalizeBackendMessage(response, payload)
+            };
+        } catch (error) {
+            console.warn(`Graph Explorer: request to ${endpoint} failed.`, error);
+            return {
+                ok: false,
+                response: null,
+                payload: null,
+                message: "Request failed."
+            };
+        }
+    }
+
     function renderConsole() {
         const refs = getConsoleElements();
 
@@ -661,7 +711,7 @@
         refs.toggleButton.setAttribute("aria-expanded", String(!state.consoleUI.isCollapsed));
     }
 
-    function handleRunConsoleCommand() {
+    async function handleRunConsoleCommand() {
         const command = state.consoleUI.currentInput.trim();
         if (!command) {
             return;
@@ -669,13 +719,14 @@
 
         pushConsoleHistory(command);
         pushConsoleOutputLine(`> ${command}`);
-        pushConsoleOutputLine(CONSOLE_PLACEHOLDER_OUTPUT);
-
-        // TODO: parse and validate supported console commands.
-        // TODO: connect console commands to backend/platform endpoint.
-        // TODO: map command responses to corresponding console UI updates.
-
         state.consoleUI.currentInput = "";
+        renderConsole();
+
+        const result = await postJsonRequest(CLI_EXECUTE_ENDPOINT, {
+            graph_id: state.activeGraphId || null,
+            command: command
+        });
+        pushConsoleOutputLine(result.message);
         renderConsole();
     }
 
@@ -816,7 +867,75 @@
         renderToolbarState();
     }
 
-    function handleApplyQuery() {
+    function parseFilterValue(rawValue) {
+        if (rawValue === "true") {
+            return true;
+        }
+        if (rawValue === "false") {
+            return false;
+        }
+
+        const numericValue = Number(rawValue);
+        if (!Number.isNaN(numericValue) && rawValue.trim() !== "") {
+            return numericValue;
+        }
+
+        return rawValue;
+    }
+
+    function buildAppliedFiltersPayload() {
+        return state.queryUI.appliedChips
+            .filter(function (chip) {
+                return chip.type === "filter" && chip.payload;
+            })
+            .map(function (chip) {
+                return {
+                    key: String(chip.payload.attribute ?? ""),
+                    op: String(chip.payload.operator ?? DEFAULT_FILTER_OPERATOR),
+                    value: parseFilterValue(String(chip.payload.value ?? ""))
+                };
+            })
+            .filter(function (item) {
+                return item.key.trim() && item.op.trim();
+            });
+    }
+
+    async function sendSearchRequest() {
+        const query = state.queryUI.searchText.trim();
+        if (!query) {
+            return;
+        }
+
+        if (!state.activeGraphId) {
+            pushConsoleOutputLine("Load a graph first.");
+            renderConsole();
+            return;
+        }
+
+        const result = await postJsonRequest(GRAPH_SEARCH_ENDPOINT, {
+            graph_id: state.activeGraphId,
+            query: query
+        });
+        pushConsoleOutputLine(result.message);
+        renderConsole();
+    }
+
+    async function sendFilterRequest() {
+        if (!state.activeGraphId) {
+            pushConsoleOutputLine("Load a graph first.");
+            renderConsole();
+            return;
+        }
+
+        const result = await postJsonRequest(GRAPH_FILTER_ENDPOINT, {
+            graph_id: state.activeGraphId,
+            filters: buildAppliedFiltersPayload()
+        });
+        pushConsoleOutputLine(result.message);
+        renderConsole();
+    }
+
+    async function handleApplyQuery() {
         const searchText = state.queryUI.searchText.trim();
         const attribute = state.queryUI.filterAttribute.trim();
         const operator = state.queryUI.filterOperator.trim();
@@ -835,15 +954,12 @@
             }));
         }
 
-        if (!chipsToAdd.length) {
-            renderToolbarState();
-            return;
+        if (chipsToAdd.length) {
+            state.queryUI.appliedChips = state.queryUI.appliedChips.concat(chipsToAdd);
         }
 
-        state.queryUI.appliedChips = state.queryUI.appliedChips.concat(chipsToAdd);
-
-        // TODO: send query/filter payload to backend and rerender filtered subgraph.
         renderToolbarState();
+        await sendFilterRequest();
     }
 
     function resetQueryFilterState() {
@@ -867,6 +983,13 @@
         refs.searchInput.addEventListener("input", function (event) {
             state.queryUI.searchText = event.target.value;
             renderToolbarState();
+        });
+
+        refs.searchInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendSearchRequest();
+            }
         });
 
         refs.filterAttributeInput.addEventListener("input", function (event) {
@@ -902,15 +1025,6 @@
                 removeAppliedChip(target.getAttribute("data-chip-id"));
             });
         }
-
-        [refs.searchInput, refs.filterAttributeInput, refs.filterValueInput].forEach(function (input) {
-            input.addEventListener("keydown", function (event) {
-                if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleApplyQuery();
-                }
-            });
-        });
     }
 
     function renderVisualizerIframe(container, html) {
