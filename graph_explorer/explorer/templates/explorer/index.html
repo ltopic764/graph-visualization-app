@@ -3,53 +3,67 @@
 {% block content %}
 <div id="graph-explorer-layout" class="app-shell">
     <header id="top-toolbar" class="toolbar">
-        <section id="file-input-area" class="toolbar-group">
-            <h2 class="group-title">File Input</h2>
-            <button type="button" class="placeholder-button">Select File</button>
-            <span class="placeholder-text">No file selected</span>
-        </section>
+        <div class="tools-row">
+            <section id="file-input-area" class="toolbar-group compact-group toolbar-column">
+                <h2 class="group-title">File</h2>
+                <div class="file-row">
+                    <input
+                        id="graph-file-input"
+                        type="file"
+                        accept=".json,.csv"
+                        aria-label="Upload graph file"
+                    >
+                    <button id="load-graph-button" type="button" class="placeholder-button">Load</button>
+                </div>
+                <div class="toolbar-inline-feedback">
+                    <span id="selected-file-name" class="placeholder-text">No file selected</span>
+                    <p id="file-load-status" class="toolbar-feedback">Select a JSON or CSV file to load.</p>
+                </div>
+            </section>
 
-        <section id="search-area" class="toolbar-group">
-            <h2 class="group-title">Search</h2>
-            <input
-                id="search-input"
-                type="text"
-                placeholder="Search nodes or edges"
-                aria-label="Search text"
-            >
-            <p id="search-preview" class="toolbar-feedback">Current search: none</p>
-        </section>
+            <section id="search-area" class="toolbar-group compact-group toolbar-column">
+                <h2 class="group-title">Search</h2>
+                <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search nodes or edges"
+                    aria-label="Search text"
+                >
+                <p id="search-preview" class="toolbar-feedback">Current search: none</p>
+            </section>
 
-        <section id="filter-area" class="toolbar-group">
-            <h2 class="group-title">Filters</h2>
-            <input
-                id="filter-attribute-input"
-                type="text"
-                placeholder="Filter key"
-                aria-label="Filter attribute"
-            >
-            <select id="filter-operator-select" aria-label="Filter operator">
-                <option>==</option>
-                <option>!=</option>
-                <option>&gt;</option>
-                <option>&gt;=</option>
-                <option>&lt;</option>
-                <option>&lt;=</option>
-            </select>
-            <input
-                id="filter-value-input"
-                type="text"
-                placeholder="Filter value"
-                aria-label="Filter value"
-            >
-            <div class="toolbar-actions">
-                <button id="apply-query-button" type="button" class="placeholder-button">Apply</button>
-                <button id="clear-query-state-button" type="button" class="placeholder-button secondary-button">Clear</button>
-            </div>
-        </section>
+            <section id="filter-area" class="toolbar-group compact-group toolbar-column">
+                <h2 class="group-title">Filters</h2>
+                <div class="filter-row">
+                    <input
+                        id="filter-attribute-input"
+                        type="text"
+                        placeholder="Filter key"
+                        aria-label="Filter attribute"
+                    >
+                    <select id="filter-operator-select" aria-label="Filter operator">
+                        <option>==</option>
+                        <option>!=</option>
+                        <option>&gt;</option>
+                        <option>&gt;=</option>
+                        <option>&lt;</option>
+                        <option>&lt;=</option>
+                    </select>
+                    <input
+                        id="filter-value-input"
+                        type="text"
+                        placeholder="Filter value"
+                        aria-label="Filter value"
+                    >
+                    <div class="toolbar-actions">
+                        <button id="apply-query-button" type="button" class="placeholder-button">Apply</button>
+                        <button id="clear-query-state-button" type="button" class="placeholder-button secondary-button">Clear</button>
+                    </div>
+                </div>
+            </section>
+        </div>
 
-        <section id="applied-queries-area" class="toolbar-group tags-row">
-            <h2 class="group-title">Applied Queries</h2>
+        <section id="applied-queries-area" class="toolbar-group tags-row chips-row">
             <p id="applied-query-count" class="toolbar-feedback">0 applied</p>
             <div id="applied-query-tags" aria-live="polite"></div>
             <p id="applied-query-empty" class="toolbar-feedback">No applied queries</p>
@@ -72,45 +86,12 @@
 
         <section id="tree-view-panel" class="panel">
             <h2 class="panel-title">Tree View</h2>
-            <div id="tree-view-content" class="panel-body placeholder-box render-surface">
-                Tree view placeholder
-            </div>
+            <div id="tree-view-content" class="panel-body render-surface view-scrollable"></div>
         </section>
 
         <section id="bird-view-panel" class="panel">
             <h2 class="panel-title">Bird View</h2>
-            <div id="bird-view-content" class="panel-body placeholder-box render-surface">
-                Bird view placeholder
-            </div>
-        </section>
-
-        <section id="console-panel" class="panel">
-            <h2 class="panel-title">Console</h2>
-            <div id="console-panel-body" class="panel-body console-panel-body">
-                <div id="console-input-row" class="console-input-row">
-                    <input
-                        id="console-command-input"
-                        class="console-command-input"
-                        type="text"
-                        placeholder="Enter command (frontend-only placeholder)"
-                        aria-label="Console command input"
-                    >
-                    <button id="console-run-button" type="button" class="placeholder-button">Run</button>
-                    <button id="console-clear-button" type="button" class="placeholder-button secondary-button">Clear</button>
-                </div>
-
-                <section class="console-section" aria-label="Console output">
-                    <h3 class="console-section-title">Output</h3>
-                    <div id="console-output" class="console-output" aria-live="polite"></div>
-                    <p id="console-output-empty" class="empty-note">No console output yet.</p>
-                </section>
-
-                <section class="console-section" aria-label="Console history">
-                    <h3 class="console-section-title">History</h3>
-                    <ol id="console-history-list" class="console-history-list"></ol>
-                    <p id="console-history-empty" class="empty-note">No command history yet.</p>
-                </section>
-            </div>
+            <div id="bird-view-content" class="panel-body render-surface view-scrollable"></div>
         </section>
     </aside>
 
@@ -121,16 +102,38 @@
                 <p id="graph-fetch-status-message" class="graph-fetch-status-message"></p>
                 <button id="graph-fetch-retry-button" type="button" class="placeholder-button secondary-button" hidden>Retry</button>
             </div>
-            <div id="main-view-content" class="panel-body placeholder-box render-surface">
-                <p id="main-view-render-status" class="view-meta"></p>
+            <div id="main-view-content" class="panel-body render-surface">
+                <p id="main-view-render-status" class="view-meta" hidden></p>
                 <p id="main-view-render-error" class="empty-note" hidden></p>
-                <div id="main-view-visualizer-output" class="main-view-visualizer-output" hidden></div>
-                <div id="main-view-fallback-content" class="main-view-fallback-content">
-                    {{ placeholder_message }}
-                    <p>TODO: plugin render output will be injected here</p>
-                </div>
+                <div id="main-view-visualizer-output" class="main-view-output"></div>
             </div>
         </section>
     </main>
+
+    <section id="console-dock" class="console-dock is-collapsed" aria-label="Console dock">
+        <header class="console-dock-header">
+            <h2 class="console-dock-title">Console</h2>
+            <button id="console-toggle-button" type="button" class="placeholder-button secondary-button">Open</button>
+        </header>
+        <div id="console-dock-body" class="console-dock-body">
+            <div id="console-input-row" class="console-input-row">
+                <input
+                    id="console-command-input"
+                    class="console-command-input"
+                    type="text"
+                    placeholder="Enter command (frontend-only placeholder)"
+                    aria-label="Console command input"
+                >
+                <button id="console-run-button" type="button" class="placeholder-button">Run</button>
+                <button id="console-clear-button" type="button" class="placeholder-button secondary-button">Clear</button>
+            </div>
+
+            <section class="console-section console-output-section" aria-label="Console output">
+                <h3 class="console-section-title">Output</h3>
+                <div id="console-output" class="console-output" aria-live="polite"></div>
+                <p id="console-output-empty" class="empty-note">No console output yet.</p>
+            </section>
+        </div>
+    </section>
 </div>
 {% endblock %}

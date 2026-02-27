@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+        .graph-container { width: 100%; height: 100%; overflow: auto; background: #fafafa; }
+        #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; }
         .node circle { stroke: #333; stroke-width: 1px; transition: fill 0.3s; }
         .node:hover circle { fill: #ff9800; cursor: pointer; }
+        .node.selected circle { stroke: #ff6a00; stroke-width: 4px; fill: #fff4e8; }
+        .node text { pointer-events: none; }
         .edge-line { stroke: #999; stroke-opacity: 0.6; }
     </style>
 </head>
 <body>
     {# You can change measurements for width and height of container as you wish, but then you need to
     adjust them in the plugin accordingly #}
-    <div class="graph-container">
-        <svg width="{{ width }}" height="{{ height }}" style="background: #fafafa; border: 1px solid #eee;">
+    <div id="viz-scroll" class="graph-container">
+        <svg id="viz-svg" width="{{ width }}" height="{{ height }}">
             <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7"
                         refX="{{ radius / scale + 1 }}" refY="3.5" orient="auto">
@@ -33,7 +38,7 @@
 
             {% for node in nodes %}
                 {% set pos = positions[node.node_id] %}
-                <g class="node" id="node-{{ node.node_id }}">
+                <g class="node gv-node" id="node-{{ node.node_id }}" data-node-id="{{ node.node_id }}">
                     <circle cx="{{ pos.x }}" cy="{{ pos.y }}" r="{{ radius }}"
                             fill="white" stroke="black" stroke-width="2" />
                     <text x="{{ pos.x }}" y="{{ pos.y + (font_size/3) }}"
@@ -45,5 +50,80 @@
             {% endfor %}
         </svg>
     </div>
+    <script>
+        (function () {
+            "use strict";
+
+            const scrollContainer = document.getElementById("viz-scroll");
+            const nodes = Array.from(document.querySelectorAll("[data-node-id]"));
+            const nodesById = new Map();
+            let selectedNodeId = null;
+
+            nodes.forEach(function (nodeEl) {
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (nodeId) {
+                    nodesById.set(nodeId, nodeEl);
+                }
+            });
+
+            function setSelectedNode(nodeId) {
+                selectedNodeId = nodeId === null || nodeId === undefined || nodeId === "" ? null : String(nodeId);
+                nodes.forEach(function (nodeEl) {
+                    const nodeElId = nodeEl.getAttribute("data-node-id");
+                    nodeEl.classList.toggle("selected", selectedNodeId !== null && nodeElId === selectedNodeId);
+                });
+            }
+
+            function focusNode(nodeId) {
+                if (!scrollContainer || !nodeId) {
+                    return;
+                }
+                const nodeEl = nodesById.get(String(nodeId));
+                if (!nodeEl) {
+                    return;
+                }
+
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const nodeRect = nodeEl.getBoundingClientRect();
+                const centerX = scrollContainer.scrollLeft + (nodeRect.left - containerRect.left) + (nodeRect.width / 2);
+                const centerY = scrollContainer.scrollTop + (nodeRect.top - containerRect.top) + (nodeRect.height / 2);
+                const maxLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth);
+                const maxTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+                const targetLeft = Math.max(0, Math.min(maxLeft, centerX - (scrollContainer.clientWidth / 2)));
+                const targetTop = Math.max(0, Math.min(maxTop, centerY - (scrollContainer.clientHeight / 2)));
+
+                scrollContainer.scrollTo({
+                    left: targetLeft,
+                    top: targetTop,
+                    behavior: "smooth"
+                });
+            }
+
+            nodes.forEach(function (nodeEl) {
+                nodeEl.addEventListener("click", function () {
+                    const nodeId = nodeEl.getAttribute("data-node-id");
+                    setSelectedNode(nodeId);
+                    focusNode(nodeId);
+                    if (window.parent) {
+                        window.parent.postMessage({ type: "nodeSelected", nodeId: nodeId }, "*");
+                    }
+                });
+            });
+
+            window.addEventListener("message", function (event) {
+                const message = event.data;
+                if (!message || typeof message !== "object") {
+                    return;
+                }
+                if (message.type === "selectNode") {
+                    setSelectedNode(message.nodeId);
+                    return;
+                }
+                if (message.type === "focusNode") {
+                    focusNode(message.nodeId);
+                }
+            });
+        })();
+    </script>
 </body>
 </html>

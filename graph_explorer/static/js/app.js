@@ -4,10 +4,9 @@
     // TODO: add D3-based rendering for the active visualizer in Main View.
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
-    const EMPTY_GRAPH = { nodes: [], edges: [] };
     const DEFAULT_FILTER_OPERATOR = "==";
     const CONSOLE_PLACEHOLDER_OUTPUT = "Command execution is not implemented yet (frontend-only placeholder).";
-    const GRAPH_FETCH_ENDPOINT = "/api/mock-graph/";
+    const GRAPH_LOAD_ENDPOINT = "/api/graph/load";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
     let graphFetchSuccessHideTimeoutId = null;
@@ -15,16 +14,21 @@
 
     const state = {
         activeVisualizer: "simple",
+        activeGraphId: null,
         isDirected: true,
         selectedNodeId: null,
-        graph: EMPTY_GRAPH,
+        selectedUploadFile: null,
+        selectedUploadFilename: "",
+        graph: null,
         graphFetchStatus: "idle",
         graphFetchErrorMessage: null,
         graphFetchLastLoadedAt: null,
+        graphFetchMeta: null,
         visualizerRender: {
             status: "idle",
             errorMessage: null,
             html: "",
+            renderedGraphId: null,
             renderedVisualizerId: null,
             renderedIsDirected: null
         },
@@ -40,6 +44,7 @@
             currentInput: "",
             history: [],
             outputLines: [],
+            isCollapsed: true,
             maxHistory: 20,
             maxOutputLines: 120
         }
@@ -51,7 +56,7 @@
 
     function toGraphState(graph) {
         if (!isValidGraphShape(graph)) {
-            return EMPTY_GRAPH;
+            return null;
         }
         return {
             nodes: graph.nodes,
@@ -73,33 +78,86 @@
         }
     }
 
-    async function loadGraphData() {
+    function hasLoadedGraph() {
+        return Boolean(state.activeGraphId) && isValidGraphShape(state.graph);
+    }
+
+    function resetVisualizerRenderState(status, errorMessage) {
+        state.visualizerRender.status = status || "idle";
+        state.visualizerRender.errorMessage = errorMessage || null;
+        state.visualizerRender.html = "";
+        state.visualizerRender.renderedGraphId = null;
+        state.visualizerRender.renderedVisualizerId = null;
+        state.visualizerRender.renderedIsDirected = null;
+    }
+
+    function clearLoadedGraphState() {
+        state.activeGraphId = null;
+        state.graph = null;
+        state.selectedNodeId = null;
+        resetVisualizerRenderState("idle", null);
+    }
+
+    async function loadGraphData(file) {
+        if (file && file.name) {
+            state.selectedUploadFilename = file.name;
+        }
+
+        if (!file) {
+            clearLoadedGraphState();
+            state.graphFetchStatus = "error";
+            state.graphFetchErrorMessage = "Please choose a JSON or CSV file before loading.";
+            state.graphFetchLastLoadedAt = null;
+            state.graphFetchMeta = null;
+            renderAll();
+            return;
+        }
+
         clearGraphFetchSuccessHideTimeout();
+        clearLoadedGraphState();
         state.graphFetchStatus = "loading";
         state.graphFetchErrorMessage = null;
+        state.graphFetchMeta = null;
         renderAll();
 
-        // TODO: replace GRAPH_FETCH_ENDPOINT with the real platform graph endpoint.
-        // TODO: add retry throttling/backoff to avoid tight repeated failures.
-        // TODO: centralize async status handling for graph/query/filter/console actions.
         try {
-            const response = await fetch(GRAPH_FETCH_ENDPOINT, {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch(GRAPH_LOAD_ENDPOINT, {
+                method: "POST",
+                body: formData,
                 headers: { Accept: "application/json" }
             });
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorMessage = payload && payload.error ? payload.error : `HTTP ${response.status}`;
+                throw new Error(errorMessage);
             }
 
-            const payload = await response.json();
-            if (!isValidGraphShape(payload)) {
-                throw new Error("Invalid graph response shape; expected nodes[] and edges[].");
+            if (!payload || payload.ok !== true || !isValidGraphShape(payload.graph)) {
+                throw new Error("Invalid graph response shape; expected { ok, graph_id, graph: {nodes, edges} }.");
             }
 
-            state.graph = toGraphState(payload);
+            state.activeGraphId = typeof payload.graph_id === "string" ? payload.graph_id : null;
+            if (!state.activeGraphId) {
+                throw new Error("Missing graph_id in load response.");
+            }
+            state.graph = toGraphState(payload.graph);
             state.graphFetchStatus = "success";
             state.graphFetchErrorMessage = null;
             state.graphFetchLastLoadedAt = Date.now();
+            state.graphFetchMeta = payload.meta || null;
+            resetVisualizerRenderState("idle", null);
             renderAll();
+            loadVisualizerOutput();
 
             graphFetchSuccessHideTimeoutId = setTimeout(function () {
                 if (state.graphFetchStatus === "success") {
@@ -109,12 +167,13 @@
                 graphFetchSuccessHideTimeoutId = null;
             }, SUCCESS_STATUS_AUTO_HIDE_MS);
         } catch (error) {
-            console.warn(`Graph Explorer: unable to load ${GRAPH_FETCH_ENDPOINT}.`, error);
+            console.warn(`Graph Explorer: unable to load ${GRAPH_LOAD_ENDPOINT}.`, error);
 
-            state.graph = EMPTY_GRAPH;
+            clearLoadedGraphState();
             state.graphFetchStatus = "error";
             state.graphFetchErrorMessage = `Failed to load graph (${getGraphFetchErrorMessage(error)})`;
             state.graphFetchLastLoadedAt = null;
+            state.graphFetchMeta = null;
             renderAll();
         }
     }
@@ -186,9 +245,54 @@
         }
     }
 
+    function postMessageToIframe(message, withRetry) {
+        const iframe = document.getElementById("main-view-visualizer-iframe");
+        if (!iframe || !iframe.contentWindow) {
+            return;
+        }
+        iframe.contentWindow.postMessage(message, "*");
+
+        if (!withRetry) {
+            return;
+        }
+
+        setTimeout(function () {
+            const iframeRetry = document.getElementById("main-view-visualizer-iframe");
+            if (!iframeRetry || !iframeRetry.contentWindow) {
+                return;
+            }
+            iframeRetry.contentWindow.postMessage(message, "*");
+        }, 120);
+    }
+
+    function postSelectedNodeToIframe() {
+        postMessageToIframe(
+            {
+                type: "selectNode",
+                nodeId: state.selectedNodeId
+            },
+            true
+        );
+
+        if (state.selectedNodeId) {
+            postMessageToIframe(
+                {
+                    type: "focusNode",
+                    nodeId: state.selectedNodeId
+                },
+                true
+            );
+        }
+    }
+
     function setSelectedNode(nodeId) {
-        state.selectedNodeId = nodeId ? String(nodeId) : null;
+        const nextNodeId = nodeId ? String(nodeId) : null;
+        if (state.selectedNodeId === nextNodeId) {
+            return;
+        }
+        state.selectedNodeId = nextNodeId;
         renderAll();
+        postSelectedNodeToIframe();
     }
 
     function setActiveVisualizer(mode) {
@@ -200,7 +304,9 @@
         }
         state.activeVisualizer = mode;
         renderAll();
-        loadVisualizerOutput();
+        if (hasLoadedGraph()) {
+            loadVisualizerOutput();
+        }
     }
 
     function setDirectedMode(isDirected) {
@@ -210,7 +316,9 @@
         }
         state.isDirected = normalized;
         renderAll();
-        loadVisualizerOutput();
+        if (hasLoadedGraph()) {
+            loadVisualizerOutput();
+        }
     }
 
     function getToolbarElements() {
@@ -228,15 +336,29 @@
         };
     }
 
+    function getFileInputElements() {
+        return {
+            fileInput: document.getElementById("graph-file-input"),
+            loadButton: document.getElementById("load-graph-button"),
+            selectedFileName: document.getElementById("selected-file-name"),
+            status: document.getElementById("file-load-status")
+        };
+    }
+
     function getConsoleElements() {
         return {
             commandInput: document.getElementById("console-command-input"),
             runButton: document.getElementById("console-run-button"),
             clearButton: document.getElementById("console-clear-button"),
             output: document.getElementById("console-output"),
-            outputEmpty: document.getElementById("console-output-empty"),
-            historyList: document.getElementById("console-history-list"),
-            historyEmpty: document.getElementById("console-history-empty")
+            outputEmpty: document.getElementById("console-output-empty")
+        };
+    }
+
+    function getConsoleDockElements() {
+        return {
+            dock: document.getElementById("console-dock"),
+            toggleButton: document.getElementById("console-toggle-button")
         };
     }
 
@@ -250,21 +372,50 @@
 
     function getGraphFetchStatusLabel() {
         if (state.graphFetchStatus === "loading") {
-            return "Loading graph...";
-        }
-        if (state.graphFetchStatus === "success") {
-            if (state.graphFetchLastLoadedAt) {
-                const loadedAt = new Date(state.graphFetchLastLoadedAt);
-                if (!Number.isNaN(loadedAt.getTime())) {
-                    return `Graph loaded (${loadedAt.toLocaleTimeString()}).`;
-                }
-            }
-            return "Graph loaded.";
+            return "Uploading and parsing graph...";
         }
         if (state.graphFetchStatus === "error") {
             return state.graphFetchErrorMessage || "Failed to load graph.";
         }
+        if (hasLoadedGraph() && state.visualizerRender.status === "loading") {
+            return "Rendering graph...";
+        }
+        if (hasLoadedGraph() && state.visualizerRender.status === "error") {
+            return state.visualizerRender.errorMessage || "Failed to render graph.";
+        }
+        if (state.graphFetchStatus === "success") {
+            const meta = state.graphFetchMeta || {};
+            const nodeCount = Number.isFinite(meta.node_count) ? meta.node_count : getNodes().length;
+            const edgeCount = Number.isFinite(meta.edge_count) ? meta.edge_count : getEdges().length;
+            const filenamePart = meta.filename ? ` from ${meta.filename}` : "";
+            if (state.graphFetchLastLoadedAt) {
+                const loadedAt = new Date(state.graphFetchLastLoadedAt);
+                if (!Number.isNaN(loadedAt.getTime())) {
+                    return `Graph loaded${filenamePart} (${nodeCount} nodes, ${edgeCount} edges at ${loadedAt.toLocaleTimeString()}).`;
+                }
+            }
+            return `Graph loaded${filenamePart} (${nodeCount} nodes, ${edgeCount} edges).`;
+        }
         return "";
+    }
+
+    function getGraphFetchStatusTone() {
+        if (state.graphFetchStatus === "loading") {
+            return "loading";
+        }
+        if (state.graphFetchStatus === "error") {
+            return "error";
+        }
+        if (hasLoadedGraph() && state.visualizerRender.status === "loading") {
+            return "loading";
+        }
+        if (hasLoadedGraph() && state.visualizerRender.status === "error") {
+            return "error";
+        }
+        if (state.graphFetchStatus === "success") {
+            return "success";
+        }
+        return "idle";
     }
 
     function renderGraphFetchStatus() {
@@ -274,17 +425,20 @@
         }
 
         const statusLabel = getGraphFetchStatusLabel();
-        const isVisible = state.graphFetchStatus !== "idle" && Boolean(statusLabel);
+        const statusTone = getGraphFetchStatusTone();
+        const isVisible = Boolean(statusLabel);
         refs.banner.classList.toggle("is-hidden", !isVisible);
         refs.banner.classList.remove("is-idle", "is-loading", "is-success", "is-error");
         if (isVisible) {
-            refs.banner.classList.add(`is-${state.graphFetchStatus}`);
+            refs.banner.classList.add(`is-${statusTone}`);
         }
         refs.message.textContent = statusLabel;
 
         if (refs.retryButton) {
-            const isError = state.graphFetchStatus === "error";
-            refs.retryButton.hidden = !isError;
+            const canRetryLoad = state.graphFetchStatus === "error" && Boolean(state.selectedUploadFile);
+            const canRetryRender = state.graphFetchStatus !== "loading" && state.visualizerRender.status === "error" && hasLoadedGraph();
+            const canRetry = canRetryLoad || canRetryRender;
+            refs.retryButton.hidden = !canRetry;
             refs.retryButton.disabled = state.graphFetchStatus === "loading";
         }
     }
@@ -295,7 +449,79 @@
             return;
         }
         refs.retryButton.addEventListener("click", function () {
-            loadGraphData();
+            if (state.graphFetchStatus === "error") {
+                loadGraphData(state.selectedUploadFile);
+                return;
+            }
+            if (state.visualizerRender.status === "error" && hasLoadedGraph()) {
+                loadVisualizerOutput();
+            }
+        });
+    }
+
+    function getFileLoadStatusLabel() {
+        if (!state.selectedUploadFile) {
+            return "Select a JSON or CSV file to load.";
+        }
+        if (state.graphFetchStatus === "loading") {
+            return `Uploading ${state.selectedUploadFilename}...`;
+        }
+        if (state.graphFetchStatus === "success") {
+            const graphIdLabel = state.activeGraphId ? `graph_id ${state.activeGraphId}` : "graph loaded";
+            return `Loaded ${state.selectedUploadFilename} (${graphIdLabel}).`;
+        }
+        if (state.graphFetchStatus === "error") {
+            return state.graphFetchErrorMessage || "Failed to load graph.";
+        }
+        return `Selected file: ${state.selectedUploadFilename}`;
+    }
+
+    function renderFileInputState() {
+        const refs = getFileInputElements();
+        if (refs.selectedFileName) {
+            refs.selectedFileName.textContent = state.selectedUploadFile
+                ? state.selectedUploadFilename
+                : "No file selected";
+        }
+
+        if (refs.status) {
+            refs.status.textContent = getFileLoadStatusLabel();
+        }
+
+        if (refs.loadButton) {
+            refs.loadButton.disabled = state.graphFetchStatus === "loading" || !state.selectedUploadFile;
+        }
+    }
+
+    function bindFileInputControls() {
+        const refs = getFileInputElements();
+        if (!refs.fileInput) {
+            return;
+        }
+
+        refs.fileInput.addEventListener("change", function (event) {
+            const nextFile = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+            state.selectedUploadFile = nextFile;
+            state.selectedUploadFilename = nextFile ? nextFile.name : "";
+            clearGraphFetchSuccessHideTimeout();
+            state.graphFetchStatus = "idle";
+            state.graphFetchErrorMessage = null;
+            state.graphFetchLastLoadedAt = null;
+            state.graphFetchMeta = null;
+            renderAll();
+        });
+
+        if (refs.loadButton) {
+            refs.loadButton.addEventListener("click", function () {
+                loadGraphData(state.selectedUploadFile);
+            });
+        }
+
+        refs.fileInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                loadGraphData(state.selectedUploadFile);
+            }
         });
     }
 
@@ -303,8 +529,7 @@
         return {
             status: document.getElementById("main-view-render-status"),
             error: document.getElementById("main-view-render-error"),
-            output: document.getElementById("main-view-visualizer-output"),
-            fallback: document.getElementById("main-view-fallback-content")
+            output: document.getElementById("main-view-visualizer-output")
         };
     }
 
@@ -319,41 +544,48 @@
         if (state.visualizerRender.status === "loading") {
             return "Rendering...";
         }
-        if (state.visualizerRender.status === "success") {
-            return `Rendered ${state.activeVisualizer} (${state.isDirected ? "directed" : "undirected"}).`;
-        }
         return "";
     }
 
-    function buildVisualizerRenderUrl(visualizerId, isDirected) {
+    function buildVisualizerRenderUrl(visualizerId, isDirected, graphId) {
         const params = new URLSearchParams({
             visualizer_id: visualizerId,
-            directed: isDirected ? "1" : "0"
+            directed: isDirected ? "1" : "0",
+            graph_id: graphId
         });
         return `${VISUALIZER_RENDER_ENDPOINT}?${params.toString()}`;
     }
 
     async function loadVisualizerOutput() {
+        if (!hasLoadedGraph()) {
+            resetVisualizerRenderState("idle", null);
+            renderAll();
+            return;
+        }
+
         const visualizerId = state.activeVisualizer;
         const isDirected = state.isDirected;
+        const graphId = state.activeGraphId;
         const requestId = visualizerRenderRequestSequence + 1;
         visualizerRenderRequestSequence = requestId;
 
         state.visualizerRender.status = "loading";
         state.visualizerRender.errorMessage = null;
         state.visualizerRender.html = "";
+        state.visualizerRender.renderedGraphId = null;
         state.visualizerRender.renderedVisualizerId = null;
         state.visualizerRender.renderedIsDirected = null;
-        renderMainView();
+        renderAll();
 
         try {
-            const response = await fetch(buildVisualizerRenderUrl(visualizerId, isDirected), {
+            const response = await fetch(buildVisualizerRenderUrl(visualizerId, isDirected, graphId), {
                 headers: { Accept: "text/html" }
             });
             const html = await response.text();
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const message = html && html.trim() ? html.trim().replace(/\s+/g, " ") : `HTTP ${response.status}`;
+                throw new Error(message);
             }
 
             if (requestId !== visualizerRenderRequestSequence) {
@@ -363,9 +595,10 @@
             state.visualizerRender.status = "success";
             state.visualizerRender.errorMessage = null;
             state.visualizerRender.html = html;
+            state.visualizerRender.renderedGraphId = graphId;
             state.visualizerRender.renderedVisualizerId = visualizerId;
             state.visualizerRender.renderedIsDirected = isDirected;
-            renderMainView();
+            renderAll();
         } catch (error) {
             if (requestId !== visualizerRenderRequestSequence) {
                 return;
@@ -375,23 +608,24 @@
             state.visualizerRender.errorMessage =
                 `Failed to render ${visualizerId} visualizer (${getVisualizerRenderErrorMessage(error)})`;
             state.visualizerRender.html = "";
+            state.visualizerRender.renderedGraphId = null;
             state.visualizerRender.renderedVisualizerId = null;
             state.visualizerRender.renderedIsDirected = null;
-            renderMainView();
+            renderAll();
         }
     }
 
     function pushConsoleHistory(command) {
-        state.consoleUI.history.push(command);
+        state.consoleUI.history.unshift(command);
         if (state.consoleUI.history.length > state.consoleUI.maxHistory) {
-            state.consoleUI.history = state.consoleUI.history.slice(-state.consoleUI.maxHistory);
+            state.consoleUI.history = state.consoleUI.history.slice(0, state.consoleUI.maxHistory);
         }
     }
 
     function pushConsoleOutputLine(line) {
-        state.consoleUI.outputLines.push(line);
+        state.consoleUI.outputLines.unshift(line);
         if (state.consoleUI.outputLines.length > state.consoleUI.maxOutputLines) {
-            state.consoleUI.outputLines = state.consoleUI.outputLines.slice(-state.consoleUI.maxOutputLines);
+            state.consoleUI.outputLines = state.consoleUI.outputLines.slice(0, state.consoleUI.maxOutputLines);
         }
     }
 
@@ -415,20 +649,16 @@
         if (refs.outputEmpty) {
             refs.outputEmpty.style.display = state.consoleUI.outputLines.length ? "none" : "";
         }
+    }
 
-        if (refs.historyList) {
-            refs.historyList.innerHTML = "";
-            state.consoleUI.history.slice().reverse().forEach(function (command) {
-                const itemEl = document.createElement("li");
-                itemEl.className = "console-history-item";
-                itemEl.textContent = command;
-                refs.historyList.appendChild(itemEl);
-            });
+    function renderConsoleDockState() {
+        const refs = getConsoleDockElements();
+        if (!refs.dock || !refs.toggleButton) {
+            return;
         }
-
-        if (refs.historyEmpty) {
-            refs.historyEmpty.style.display = state.consoleUI.history.length ? "none" : "";
-        }
+        refs.dock.classList.toggle("is-collapsed", state.consoleUI.isCollapsed);
+        refs.toggleButton.textContent = state.consoleUI.isCollapsed ? "Open" : "Hide";
+        refs.toggleButton.setAttribute("aria-expanded", String(!state.consoleUI.isCollapsed));
     }
 
     function handleRunConsoleCommand() {
@@ -484,6 +714,17 @@
                 clearConsoleState();
             });
         }
+    }
+
+    function bindConsoleDockControls() {
+        const refs = getConsoleDockElements();
+        if (!refs.toggleButton) {
+            return;
+        }
+        refs.toggleButton.addEventListener("click", function () {
+            state.consoleUI.isCollapsed = !state.consoleUI.isCollapsed;
+            renderConsoleDockState();
+        });
     }
 
     function createAppliedChip(label, type, payload) {
@@ -672,24 +913,6 @@
         });
     }
 
-    function bindMainNodeCardClicks(mainView) {
-        const cards = mainView.querySelectorAll("[data-node-id]");
-        cards.forEach(function (card) {
-            card.addEventListener("click", function () {
-                const encodedId = card.getAttribute("data-node-id");
-                if (!encodedId) {
-                    setSelectedNode(null);
-                } else {
-                    try {
-                        setSelectedNode(decodeURIComponent(encodedId));
-                    } catch (error) {
-                        setSelectedNode(encodedId);
-                    }
-                }
-            });
-        });
-    }
-
     function renderVisualizerIframe(container, html) {
         if (!container) {
             return;
@@ -704,6 +927,9 @@
             iframe.style.width = "100%";
             iframe.style.height = "100%";
             iframe.style.border = "0";
+            iframe.addEventListener("load", function () {
+                postSelectedNodeToIframe();
+            });
             container.appendChild(iframe);
         }
 
@@ -712,55 +938,31 @@
         }
     }
 
+    function bindIframeSelectionMessages() {
+        window.addEventListener("message", function (event) {
+            const message = event.data;
+            if (!message || typeof message !== "object" || message.type !== "nodeSelected") {
+                return;
+            }
+
+            if (message.nodeId === undefined || message.nodeId === null) {
+                return;
+            }
+
+            const iframe = document.getElementById("main-view-visualizer-iframe");
+            if (!iframe || !iframe.contentWindow || event.source !== iframe.contentWindow) {
+                return;
+            }
+
+            setSelectedNode(String(message.nodeId));
+        });
+    }
+
     function renderMainView() {
         const refs = getMainViewElements();
-        if (!refs.fallback) {
+        if (!refs.output) {
             return;
         }
-
-        const nodes = getNodes();
-        const edges = getEdges();
-
-        const nodeCards = nodes.length
-            ? nodes.map(function (node) {
-                const rawNodeId = node.id !== undefined && node.id !== null ? String(node.id) : "unknown";
-                const nodeIdLabel = escapeHtml(rawNodeId);
-                const nodeIdAttr = encodeURIComponent(rawNodeId);
-                const attrs = getNodeAttributes(node, 3)
-                    .map(function (attr) {
-                        return `<p class="node-card-meta">${escapeHtml(attr.key)}: ${escapeHtml(attr.value)}</p>`;
-                    })
-                    .join("");
-                const selectedClass = rawNodeId === state.selectedNodeId ? " selected" : "";
-                return [
-                    `<button type="button" class="node-card${selectedClass}" data-node-id="${nodeIdAttr}">`,
-                    `<p class="node-card-title">Node: ${nodeIdLabel}</p>`,
-                    attrs || '<p class="node-card-meta">No extra attributes</p>',
-                    "</button>"
-                ].join("");
-            }).join("")
-            : '<p class="empty-note">No nodes available in mock graph.</p>';
-
-        const edgeRows = edges.length
-            ? edges.map(function (edge) {
-                const edgeId = edge.id ? `${escapeHtml(edge.id)}: ` : "";
-                const source = escapeHtml(edge.source || "?");
-                const target = escapeHtml(edge.target || "?");
-                return `<li>${edgeId}${source} -> ${target}</li>`;
-            }).join("")
-            : "<li>No edges available in mock graph.</li>";
-
-        refs.fallback.innerHTML = [
-            '<p class="view-meta"><strong>Main View placeholder</strong></p>',
-            `<p class="view-meta">Active visualizer: <span class="visualizer-pill">${escapeHtml(state.activeVisualizer)}</span></p>`,
-            `<p class="view-meta">Direction: ${state.isDirected ? "Directed" : "Undirected"}</p>`,
-            `<p class="view-meta">Nodes: ${nodes.length} | Edges: ${edges.length}</p>`,
-            `<div class="node-cards">${nodeCards}</div>`,
-            '<p class="view-meta"><strong>Edges</strong></p>',
-            `<ul class="placeholder-list">${edgeRows}</ul>`
-        ].join("");
-
-        bindMainNodeCardClicks(refs.fallback);
 
         if (refs.status) {
             const statusLabel = getVisualizerRenderStatusLabel();
@@ -776,12 +978,13 @@
 
         if (refs.output) {
             const canRenderVisualizer =
+                hasLoadedGraph() &&
                 state.visualizerRender.status === "success" &&
+                state.visualizerRender.renderedGraphId === state.activeGraphId &&
                 state.visualizerRender.renderedVisualizerId === state.activeVisualizer &&
                 state.visualizerRender.renderedIsDirected === state.isDirected &&
                 Boolean(state.visualizerRender.html);
 
-            refs.output.hidden = !canRenderVisualizer;
             if (!canRenderVisualizer) {
                 refs.output.innerHTML = "";
             } else {
@@ -790,15 +993,48 @@
         }
     }
 
+    function bindTreeNodeClicks(treeView) {
+        const nodeButtons = treeView.querySelectorAll("[data-node-id]");
+        nodeButtons.forEach(function (button) {
+            button.addEventListener("click", function () {
+                const nodeId = button.getAttribute("data-node-id");
+                setSelectedNode(nodeId || null);
+            });
+        });
+    }
+
+    function scrollTreeSelectionIntoView(treeView) {
+        if (!treeView || !state.selectedNodeId) {
+            return;
+        }
+
+        const escapedNodeId = CSS.escape(String(state.selectedNodeId));
+        const selectedNodeEl = treeView.querySelector(`[data-node-id="${escapedNodeId}"]`);
+        if (!selectedNodeEl) {
+            return;
+        }
+
+        selectedNodeEl.scrollIntoView({
+            block: "center",
+            inline: "nearest",
+            behavior: "smooth"
+        });
+    }
+
     function renderTreeView() {
         const treeView = document.getElementById("tree-view-content");
         if (!treeView) {
             return;
         }
 
+        if (!hasLoadedGraph()) {
+            treeView.innerHTML = "";
+            return;
+        }
+
         const nodes = getNodes();
         if (!nodes.length) {
-            treeView.innerHTML = '<p class="empty-note">Tree placeholder: no nodes to list.</p>';
+            treeView.innerHTML = "";
             return;
         }
 
@@ -810,16 +1046,16 @@
             const label = node.label ? ` - ${escapeHtml(node.label)}` : "";
             return [
                 `<li class="tree-item${selectedClass}">`,
-                `<span class="tree-marker">${marker}</span>`,
-                `<span>${escapeHtml(rawNodeId)}${label}</span>`,
+                `<button type="button" class="tree-node-button" data-node-id="${escapeHtml(rawNodeId)}">`,
+                `<span class="tree-marker">${marker}</span><span>${escapeHtml(rawNodeId)}${label}</span>`,
+                "</button>",
                 "</li>"
             ].join("");
         }).join("");
 
-        treeView.innerHTML = [
-            '<p class="view-meta"><strong>Tree placeholder</strong></p>',
-            `<ul class="tree-list">${treeItems}</ul>`
-        ].join("");
+        treeView.innerHTML = `<ul class="tree-list">${treeItems}</ul>`;
+        bindTreeNodeClicks(treeView);
+        scrollTreeSelectionIntoView(treeView);
     }
 
     function renderBirdView() {
@@ -828,11 +1064,16 @@
             return;
         }
 
+        if (!hasLoadedGraph()) {
+            birdView.innerHTML = "";
+            return;
+        }
+
         const nodes = getNodes();
         const edges = getEdges();
         const selectedNode = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
 
-        let selectedSummary = '<p class="empty-note">Selected node: none</p>';
+        let selectedSummary = "";
         if (selectedNode) {
             const selectedAttrs = getNodeAttributes(selectedNode, 2)
                 .map(function (attr) {
@@ -846,8 +1087,7 @@
         }
 
         birdView.innerHTML = [
-            '<p class="view-meta"><strong>Bird placeholder overview</strong></p>',
-            `<p class="view-meta">Active visualizer: <span class="visualizer-pill">${escapeHtml(state.activeVisualizer)}</span></p>`,
+            `<p class="view-meta">Graph id: ${escapeHtml(state.activeGraphId || "")}</p>`,
             `<p class="view-meta">Nodes: ${nodes.length} | Edges: ${edges.length}</p>`,
             selectedSummary
         ].join("");
@@ -893,8 +1133,10 @@
     function renderAll() {
         syncSelectedNode();
         renderUIState();
+        renderFileInputState();
         renderGraphFetchStatus();
         renderToolbarState();
+        renderConsoleDockState();
         renderConsole();
         renderMainView();
         renderTreeView();
@@ -904,10 +1146,11 @@
     document.addEventListener("DOMContentLoaded", function () {
         bindToolbarControls();
         bindConsoleControls();
+        bindConsoleDockControls();
+        bindFileInputControls();
         bindVisualizerTabClicks();
         bindGraphFetchControls();
+        bindIframeSelectionMessages();
         renderAll();
-        loadVisualizerOutput();
-        loadGraphData();
     });
 })();
