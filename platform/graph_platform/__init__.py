@@ -2,5 +2,6 @@
 
 from .engine import GraphEngine
 from .registry import PluginRegistry
+from .workspace import Workspace
 
-__all__ = ["GraphEngine", "PluginRegistry"]
+__all__ = ["GraphEngine", "PluginRegistry", "Workspace"]
