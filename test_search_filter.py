@@ -1,6 +1,6 @@
 from api.graph_api.model import Graph, Node, Edge
-from platform.graph_platform.workspace import Workspace
-from platform.graph_platform.engine import GraphEngine
+from core.graph_platform.workspace import Workspace
+from core.graph_platform.engine import GraphEngine
 
 # ----------------------------
 # 1️⃣ Kreiranje grafa

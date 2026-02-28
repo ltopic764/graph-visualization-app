@@ -5,10 +5,10 @@
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
     const DEFAULT_FILTER_OPERATOR = "==";
-    const GRAPH_LOAD_ENDPOINT = "/api/graph/load";
+    const GRAPH_LOAD_ENDPOINT = "/api/graph/load/";
     const CLI_EXECUTE_ENDPOINT = "/api/cli/execute";
-    const GRAPH_SEARCH_ENDPOINT = "/api/graph/search";
-    const GRAPH_FILTER_ENDPOINT = "/api/graph/filter";
+    const GRAPH_SEARCH_ENDPOINT = "/api/graph/search/";
+    const GRAPH_FILTER_ENDPOINT = "/api/graph/filter/";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
     let graphFetchSuccessHideTimeoutId = null;
@@ -153,6 +153,7 @@
                 throw new Error("Missing graph_id in load response.");
             }
             state.graph = toGraphState(payload.graph);
+            state.graphOriginal = toGraphState(payload.graph);
             state.graphFetchStatus = "success";
             state.graphFetchErrorMessage = null;
             state.graphFetchLastLoadedAt = Date.now();
@@ -902,13 +903,15 @@
 
     async function sendSearchRequest() {
         const query = state.queryUI.searchText.trim();
-        if (!query) {
-            return;
-        }
 
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
             renderConsole();
+            return;
+        }
+
+        if (!query) {
+            await resetQueryFilterState();
             return;
         }
 
@@ -916,23 +919,58 @@
             graph_id: state.activeGraphId,
             query: query
         });
+
         pushConsoleOutputLine(result.message);
         renderConsole();
+
+        if (result.ok && result.payload && result.payload.graph) {
+            const newGraph = result.payload.graph;
+            if (isValidGraphShape(newGraph)) {
+                state.graph = toGraphState(newGraph);
+                renderAll();
+                loadVisualizerOutput();
+            }
+        }
     }
 
     async function sendFilterRequest() {
+        const attribute = state.queryUI.filterAttribute.trim();
+        const operator = state.queryUI.filterOperator.trim();
+        const value = state.queryUI.filterValue.trim();
+
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
             renderConsole();
             return;
         }
 
-        const result = await postJsonRequest(GRAPH_FILTER_ENDPOINT, {
+        if (!attribute || !operator || !value) {
+            pushConsoleOutputLine("Please enter attribute, operator and value to filter.");
+            renderConsole();
+            return;
+        }
+
+        const payload = {
             graph_id: state.activeGraphId,
-            filters: buildAppliedFiltersPayload()
-        });
+            attribute: attribute,
+            operator: operator,
+            value: value
+        };
+
+        console.log("Filter payload being sent:", JSON.stringify(payload));
+        const result = await postJsonRequest(GRAPH_FILTER_ENDPOINT, payload);
+
         pushConsoleOutputLine(result.message);
         renderConsole();
+
+        if (result.ok && result.payload && result.payload.graph) {
+            const newGraph = result.payload.graph;
+            if (isValidGraphShape(newGraph)) {
+                state.graph = toGraphState(newGraph);
+                renderAll();
+                loadVisualizerOutput();
+            }
+        }
     }
 
     async function handleApplyQuery() {
@@ -959,19 +997,46 @@
         }
 
         renderToolbarState();
-        await sendFilterRequest();
+
+        if (searchText) {
+            await sendSearchRequest();
+        }
+
+        if (attribute && operator && value) {
+            await sendFilterRequest();
+        }
     }
 
-    function resetQueryFilterState() {
+    async function resetQueryFilterState() {
         state.queryUI.searchText = "";
         state.queryUI.filterAttribute = "";
         state.queryUI.filterOperator = DEFAULT_FILTER_OPERATOR;
         state.queryUI.filterValue = "";
         state.queryUI.appliedChips = [];
         state.queryUI.nextChipId = 1;
-
-        // TODO: when backend filtering is integrated, clear server-side query/filter state too.
         renderToolbarState();
+
+        if (!state.activeGraphId) {
+            console.log("No active graph id, skipping reset.");
+            return;
+        }
+
+        console.log("Sending reset for graph_id:", state.activeGraphId);
+        const result = await postJsonRequest("/api/workspace/reset/", {
+            graph_id: state.activeGraphId
+        });
+        console.log("Reset result:", result);
+
+        if (result.ok && result.payload && result.payload.graph) {
+            const originalGraph = result.payload.graph;
+            console.log("Original graph nodes:", originalGraph.nodes?.length);
+            if (isValidGraphShape(originalGraph)) {
+                state.graph = toGraphState(originalGraph);
+                state.graphOriginal = toGraphState(originalGraph);
+                renderAll();
+                loadVisualizerOutput();
+            }
+        }
     }
 
     function bindToolbarControls() {

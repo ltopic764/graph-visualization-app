@@ -85,9 +85,62 @@ class Workspace:
         """Return nodes whose label contains the given substring."""
         return self.filter_nodes(lambda n: label_substr.lower() in n.label.lower())
 
-    def find_nodes_by_attribute(self, key: str, value: str) -> List[Node]:
-        """Return nodes where attribute[key] == value."""
-        return self.filter_nodes(lambda n: n.attributes.get(key) == value)
+    def find_nodes_by_attribute(self, attribute: str, operator: str, value):
+        import datetime
+
+        def coerce(v):
+            if isinstance(v, (int, float, bool)):
+                return v
+            s = str(v)
+            try:
+                return int(s)
+            except ValueError:
+                pass
+            try:
+                return float(s)
+            except ValueError:
+                pass
+            try:
+                return datetime.date.fromisoformat(s)
+            except (ValueError, TypeError):
+                pass
+            return s
+
+        ops = {
+            "==": lambda a, b: a == b,
+            "!=": lambda a, b: a != b,
+            ">":  lambda a, b: a > b,
+            ">=": lambda a, b: a >= b,
+            "<":  lambda a, b: a < b,
+            "<=": lambda a, b: a <= b,
+        }
+
+        op_fn = ops.get(operator)
+        if op_fn is None:
+            raise ValueError(f"Unsupported operator: {operator}")
+
+        coerced_value = coerce(value)
+        result = []
+
+        for node in self.list_nodes():
+            raw = node.attributes.get(attribute)
+
+            if raw is None:
+                if attribute in ("label", "name"):
+                    raw = node.label
+                elif attribute in ("id", "node_id"):
+                    raw = node.node_id
+
+            if raw is None:
+                continue
+
+            try:
+                if op_fn(coerce(raw), coerced_value):
+                    result.append(node)
+            except TypeError:
+                continue
+
+        return result
 
 
     # -----------------
