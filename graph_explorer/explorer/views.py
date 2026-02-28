@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import logging
 from pathlib import Path
@@ -11,6 +12,9 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+
+from core.graph_platform.workspace import Workspace
+WORKSPACES = {}
 
 try:
     from graph_api.model.edge import Edge
@@ -69,6 +73,7 @@ MOCK_GRAPH_DATA = {
     ],
 }
 ACTIVE_GRAPHS: dict[str, object] = {}
+ORIGINAL_GRAPHS: dict[str, object] = {}
 LOGGER = logging.getLogger(__name__)
 
 
@@ -190,16 +195,48 @@ def graph_search_api(request: HttpRequest) -> JsonResponse:
     if method_error:
         return method_error
 
-    _, error_response = _parse_json_body(request)
+    body, error_response = _parse_json_body(request)
     if error_response:
         return error_response
 
-    return json_error(
-        status_code=501,
-        error="NotImplemented",
-        message="Search is not implemented yet.",
-        expected={"graph_id": "string", "query": "string"},
-    )
+    graph_id = body.get("graph_id")
+    query = body.get("query")
+
+    if not graph_id or not query:
+        return _json_error("graph_id and query are required", 400)
+
+    workspace = WORKSPACES.get(graph_id)
+    if not workspace:
+        return _json_error("Graph not found", 404)
+
+    matched_nodes = workspace.find_nodes_by_label(query)
+
+    if not matched_nodes:
+        return JsonResponse({"ok": True, "matched_ids": [], "graph": {"nodes": [], "edges": []}})
+
+    matched_ids = {n.node_id for n in matched_nodes}
+
+    matched_edges = [
+        e for e in workspace.list_edges()
+        if e.source in matched_ids and e.target in matched_ids
+    ]
+
+    if Graph is not None and Node is not None and Edge is not None:
+        original_graph = ORIGINAL_GRAPHS.get(graph_id)
+        directed = getattr(original_graph, "directed", True) if original_graph else True
+        filtered_graph = Graph(directed=directed)
+        for node in matched_nodes:
+            filtered_graph.add_node(node)
+        for edge in matched_edges:
+            filtered_graph.add_edge(edge)
+        ACTIVE_GRAPHS[graph_id] = filtered_graph
+
+    subgraph = {
+        "nodes": [n.to_dict() for n in matched_nodes],
+        "edges": [e.to_dict() for e in matched_edges],
+    }
+
+    return JsonResponse({"ok": True, "matched_ids": list(matched_ids), "graph": subgraph})
 
 
 @csrf_exempt
@@ -208,16 +245,57 @@ def graph_filter_api(request: HttpRequest) -> JsonResponse:
     if method_error:
         return method_error
 
-    _, error_response = _parse_json_body(request)
+    body, error_response = _parse_json_body(request)
     if error_response:
         return error_response
 
-    return json_error(
-        status_code=501,
-        error="NotImplemented",
-        message="Filtering is not implemented yet.",
-        expected={"graph_id": "string", "filters": "list of {key, op, value}"},
-    )
+    graph_id = body.get("graph_id")
+    attribute = body.get("attribute")
+    operator = body.get("operator")
+    value = body.get("value")
+
+    if not graph_id or not attribute or not operator or value is None:
+        return _json_error("graph_id, attribute, operator and value are required", 400)
+
+    workspace = WORKSPACES.get(graph_id)
+    if not workspace:
+        return _json_error("Graph not found", 404)
+
+    current_graph = ACTIVE_GRAPHS.get(graph_id)
+    current_node_ids = {n.node_id for n in current_graph.nodes} if current_graph else None
+
+    all_matched = workspace.find_nodes_by_attribute(attribute, operator, value)
+
+    if current_node_ids is not None:
+        matched_nodes = [n for n in all_matched if n.node_id in current_node_ids]
+    else:
+        matched_nodes = all_matched
+
+    matched_ids = {n.node_id for n in matched_nodes}
+
+    matched_edges = [
+        e for e in workspace.list_edges()
+        if e.source in matched_ids and e.target in matched_ids
+    ]
+
+    # Napravi novi Graph objekat sa filtriranim nodovima i edges
+    if Graph is not None and Node is not None and Edge is not None:
+        original_graph = ACTIVE_GRAPHS.get(graph_id)
+        directed = getattr(original_graph, "directed", True)
+        filtered_graph = Graph(directed=directed)
+        for node in matched_nodes:
+            filtered_graph.add_node(node)
+        for edge in matched_edges:
+            filtered_graph.add_edge(edge)
+        # Sacuvaj filtrirani graf pod istim graph_id da ga visualizer moze naci
+        ACTIVE_GRAPHS[graph_id] = filtered_graph
+
+    subgraph = {
+        "nodes": [n.to_dict() for n in matched_nodes],
+        "edges": [e.to_dict() for e in matched_edges],
+    }
+
+    return JsonResponse({"ok": True, "graph": subgraph})
 
 
 @csrf_exempt
@@ -226,16 +304,25 @@ def workspace_reset_api(request: HttpRequest) -> JsonResponse:
     if method_error:
         return method_error
 
-    _, error_response = _parse_json_body(request)
+    body, error_response = _parse_json_body(request)
     if error_response:
         return error_response
 
-    return json_error(
-        status_code=501,
-        error="NotImplemented",
-        message="Workspace reset is not implemented yet.",
-        expected={"graph_id": "string|null"},
-    )
+    graph_id = body.get("graph_id")
+    if not graph_id:
+        return _json_error("graph_id is required", 400)
+
+    original_graph = ORIGINAL_GRAPHS.get(graph_id)
+    if not original_graph:
+        return _json_error("Graph not found", 404)
+
+    # Vrati originalni graf
+    ACTIVE_GRAPHS[graph_id] = original_graph
+
+    return JsonResponse({
+        "ok": True,
+        "graph": original_graph.to_dict()
+    })
 
 
 @csrf_exempt
@@ -265,6 +352,10 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
 
         graph_id = str(uuid4())
         ACTIVE_GRAPHS[graph_id] = graph
+        ORIGINAL_GRAPHS[graph_id] = graph
+        workspace = Workspace()
+        workspace.set_graph(graph)
+        WORKSPACES[graph_id] = workspace
         _store_active_graph_id_in_session(request, graph_id)
 
         graph_payload = graph.to_dict()
