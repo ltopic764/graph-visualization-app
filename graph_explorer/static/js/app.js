@@ -327,6 +327,7 @@
     function getToolbarElements() {
         return {
             searchInput: document.getElementById("search-input"),
+            searchQueryButton: document.getElementById("search-query-button"),
             filterAttributeInput: document.getElementById("filter-attribute-input"),
             filterOperatorSelect: document.getElementById("filter-operator-select"),
             filterValueInput: document.getElementById("filter-value-input"),
@@ -819,15 +820,7 @@
             labelEl.className = "query-tag-label";
             labelEl.textContent = chip.label;
 
-            const removeButton = document.createElement("button");
-            removeButton.type = "button";
-            removeButton.className = "query-tag-remove";
-            removeButton.setAttribute("data-chip-id", String(chip.id));
-            removeButton.setAttribute("aria-label", `Remove query: ${chip.label}`);
-            removeButton.textContent = "x";
-
             chipEl.appendChild(labelEl);
-            chipEl.appendChild(removeButton);
             tags.appendChild(chipEl);
         });
     }
@@ -860,49 +853,8 @@
         renderAppliedChips();
     }
 
-    function removeAppliedChip(chipId) {
-        const targetId = String(chipId);
-        state.queryUI.appliedChips = state.queryUI.appliedChips.filter(function (chip) {
-            return String(chip.id) !== targetId;
-        });
-        renderToolbarState();
-    }
-
-    function parseFilterValue(rawValue) {
-        if (rawValue === "true") {
-            return true;
-        }
-        if (rawValue === "false") {
-            return false;
-        }
-
-        const numericValue = Number(rawValue);
-        if (!Number.isNaN(numericValue) && rawValue.trim() !== "") {
-            return numericValue;
-        }
-
-        return rawValue;
-    }
-
-    function buildAppliedFiltersPayload() {
-        return state.queryUI.appliedChips
-            .filter(function (chip) {
-                return chip.type === "filter" && chip.payload;
-            })
-            .map(function (chip) {
-                return {
-                    key: String(chip.payload.attribute ?? ""),
-                    op: String(chip.payload.operator ?? DEFAULT_FILTER_OPERATOR),
-                    value: parseFilterValue(String(chip.payload.value ?? ""))
-                };
-            })
-            .filter(function (item) {
-                return item.key.trim() && item.op.trim();
-            });
-    }
-
-    async function sendSearchRequest() {
-        const query = state.queryUI.searchText.trim();
+    async function sendSearchRequest(queryText) {
+        const query = String(queryText ?? "").trim();
 
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
@@ -911,7 +863,6 @@
         }
 
         if (!query) {
-            await resetQueryFilterState();
             return;
         }
 
@@ -933,10 +884,10 @@
         }
     }
 
-    async function sendFilterRequest() {
-        const attribute = state.queryUI.filterAttribute.trim();
-        const operator = state.queryUI.filterOperator.trim();
-        const value = state.queryUI.filterValue.trim();
+    async function sendFilterRequest(attributeText, operatorText, valueText) {
+        const attribute = String(attributeText ?? "").trim();
+        const operator = String(operatorText ?? "").trim();
+        const value = String(valueText ?? "").trim();
 
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
@@ -973,38 +924,52 @@
         }
     }
 
-    async function handleApplyQuery() {
+    async function handleSearchQuery() {
+        const refs = getToolbarElements();
+        if (!refs.searchInput) {
+            return;
+        }
+
+        state.queryUI.searchText = refs.searchInput.value;
         const searchText = state.queryUI.searchText.trim();
+        if (!searchText) {
+            renderToolbarState();
+            return;
+        }
+
+        state.queryUI.appliedChips = state.queryUI.appliedChips.concat(
+            createAppliedChip(`search: ${searchText}`, "search", { searchText: searchText })
+        );
+        renderToolbarState();
+        await sendSearchRequest(searchText);
+    }
+
+    async function handleFilterQuery() {
+        const refs = getToolbarElements();
+        if (!refs.filterAttributeInput || !refs.filterOperatorSelect || !refs.filterValueInput) {
+            return;
+        }
+
+        state.queryUI.filterAttribute = refs.filterAttributeInput.value;
+        state.queryUI.filterOperator = refs.filterOperatorSelect.value;
+        state.queryUI.filterValue = refs.filterValueInput.value;
+
         const attribute = state.queryUI.filterAttribute.trim();
         const operator = state.queryUI.filterOperator.trim();
         const value = state.queryUI.filterValue.trim();
-        const chipsToAdd = [];
 
-        if (searchText) {
-            chipsToAdd.push(createAppliedChip(`search: ${searchText}`, "search", { searchText: searchText }));
+        if (!attribute || !operator || !value) {
+            await sendFilterRequest(attribute, operator, value);
+            return;
         }
 
-        if (attribute && operator && value) {
-            chipsToAdd.push(createAppliedChip(`${attribute} ${operator} ${value}`, "filter", {
-                attribute: attribute,
-                operator: operator,
-                value: value
-            }));
-        }
-
-        if (chipsToAdd.length) {
-            state.queryUI.appliedChips = state.queryUI.appliedChips.concat(chipsToAdd);
-        }
-
+        state.queryUI.appliedChips = state.queryUI.appliedChips.concat(createAppliedChip(`${attribute} ${operator} ${value}`, "filter", {
+            attribute: attribute,
+            operator: operator,
+            value: value
+        }));
         renderToolbarState();
-
-        if (searchText) {
-            await sendSearchRequest();
-        }
-
-        if (attribute && operator && value) {
-            await sendFilterRequest();
-        }
+        await sendFilterRequest(attribute, operator, value);
     }
 
     async function resetQueryFilterState() {
@@ -1050,13 +1015,6 @@
             renderToolbarState();
         });
 
-        refs.searchInput.addEventListener("keydown", function (event) {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                sendSearchRequest();
-            }
-        });
-
         refs.filterAttributeInput.addEventListener("input", function (event) {
             state.queryUI.filterAttribute = event.target.value;
         });
@@ -1069,25 +1027,21 @@
             state.queryUI.filterValue = event.target.value;
         });
 
+        if (refs.searchQueryButton) {
+            refs.searchQueryButton.addEventListener("click", function () {
+                handleSearchQuery();
+            });
+        }
+
         if (refs.applyQueryButton) {
             refs.applyQueryButton.addEventListener("click", function () {
-                handleApplyQuery();
+                handleFilterQuery();
             });
         }
 
         if (refs.clearQueryButton) {
             refs.clearQueryButton.addEventListener("click", function () {
                 resetQueryFilterState();
-            });
-        }
-
-        if (refs.appliedQueryTags) {
-            refs.appliedQueryTags.addEventListener("click", function (event) {
-                const target = event.target;
-                if (!target || !target.matches("[data-chip-id]")) {
-                    return;
-                }
-                removeAppliedChip(target.getAttribute("data-chip-id"));
             });
         }
     }
