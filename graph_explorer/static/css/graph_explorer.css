@@ -526,53 +526,129 @@ body {
     color: var(--muted);
 }
 
-.tree-list {
+#tree-view-content {
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0.2rem;
+}
+
+.tree-explorer {
     list-style: none;
     margin: 0;
     padding: 0;
 }
 
-.tree-item {
-    display: block;
-    padding: 0.18rem 0;
-    border-radius: 4px;
-    font-size: 0.84rem;
+.tree-node {
+    margin: 0;
+    padding: 0;
 }
 
-.tree-node-button {
-    display: inline-flex;
+.tree-row {
+    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    width: 100%;
-    border: 1px solid transparent;
+    gap: 0.35rem;
+    padding: 0.2rem 0.3rem;
     border-radius: 4px;
-    padding: 0.25rem 0.35rem;
-    text-align: left;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
+    border: 1px solid transparent;
 }
 
-.tree-node-button:hover {
+.tree-toggle {
+    width: 1.2rem;
+    height: 1.2rem;
+    line-height: 1.05rem;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1f5ca4;
+    text-align: center;
+    padding: 0;
+}
+
+.tree-toggle:hover {
+    background: #eef5ff;
     border-color: #bfd2ea;
+}
+
+.tree-toggle-placeholder {
+    width: 1.2rem;
+    height: 1.2rem;
+    flex: 0 0 1.2rem;
+    display: inline-block;
+}
+
+.tree-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    font-size: 0.85rem;
+    color: inherit;
+    padding: 0;
+}
+
+.tree-row:hover {
     background: #eef5ff;
 }
 
-.tree-item.selected .tree-node-button {
-    border-color: #b4cbeb;
+.tree-node.is-selected > .tree-row {
     background: #eaf2fd;
-}
-
-.tree-item.selected {
-    border-radius: 4px;
-    color: #0e3d74;
+    border-color: #b4cbeb;
     font-weight: 700;
+    color: #0e3d74;
 }
 
-.tree-marker {
-    width: 0.8rem;
-    color: var(--accent);
+.tree-children {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 1.1rem;
+    border-left: 1px solid #e0e8f2;
+}
+
+.tree-attr {
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding: 0.12rem 0.3rem 0.12rem 1.55rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-section {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #607386;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 0.2rem 0.3rem 0.08rem 1.55rem;
+}
+
+.tree-ref {
+    margin: 0;
+    padding: 0;
+}
+
+.tree-ref-btn {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    color: #335b88;
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 0.12rem 0.3rem 0.12rem 1.55rem;
+}
+
+.tree-ref-btn:hover {
+    background: #eef5ff;
+    border-color: #bfd2ea;
 }
 
 .empty-note {
