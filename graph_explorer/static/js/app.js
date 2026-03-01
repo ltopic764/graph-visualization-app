@@ -49,6 +49,12 @@
             isCollapsed: true,
             maxHistory: 20,
             maxOutputLines: 120
+        },
+        treeUI: {
+            expanded: {},
+            lastGraphId: null,
+            lastGraphSignature: "",
+            autoExpandedOnce: false
         }
     };
 
@@ -93,11 +99,19 @@
         state.visualizerRender.renderedIsDirected = null;
     }
 
+    function resetTreeState() {
+        state.treeUI.expanded = {};
+        state.treeUI.lastGraphId = null;
+        state.treeUI.lastGraphSignature = "";
+        state.treeUI.autoExpandedOnce = false;
+    }
+
     function clearLoadedGraphState() {
         state.activeGraphId = null;
         state.graph = null;
         state.selectedNodeId = null;
         resetVisualizerRenderState("idle", null);
+        resetTreeState();
     }
 
     async function loadGraphData(file) {
@@ -1126,14 +1140,251 @@
         }
     }
 
-    function bindTreeNodeClicks(treeView) {
-        const nodeButtons = treeView.querySelectorAll("[data-node-id]");
-        nodeButtons.forEach(function (button) {
-            button.addEventListener("click", function () {
-                const nodeId = button.getAttribute("data-node-id");
-                setSelectedNode(nodeId || null);
-            });
+    function getGraphNodeId(node, index) {
+        if (node && node.id !== undefined && node.id !== null) {
+            return String(node.id);
+        }
+        return `__node_${index}`;
+    }
+
+    function getTreeNodeLabel(node, nodeId) {
+        if (!node || typeof node !== "object") {
+            return String(nodeId);
+        }
+
+        const preferredLabel = node.label !== undefined && node.label !== null
+            ? node.label
+            : node.name !== undefined && node.name !== null
+                ? node.name
+                : null;
+
+        if (preferredLabel === null || String(preferredLabel).trim() === "") {
+            return String(nodeId);
+        }
+        return `${nodeId} - ${preferredLabel}`;
+    }
+
+    function formatTreeAttributeValue(value) {
+        if (value === null) {
+            return "null";
+        }
+        if (value === undefined) {
+            return "undefined";
+        }
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+        }
+        try {
+            const serialized = JSON.stringify(value);
+            if (serialized !== undefined) {
+                return serialized;
+            }
+        } catch {
+            // Ignore and fall back to String().
+        }
+        return String(value);
+    }
+
+    function getTreeNodeAttributeEntries(node) {
+        if (!node || typeof node !== "object" || !node.attributes || typeof node.attributes !== "object" || Array.isArray(node.attributes)) {
+            return [];
+        }
+
+        return Object.keys(node.attributes).map(function (key) {
+            return {
+                key: key,
+                value: node.attributes[key]
+            };
         });
+    }
+
+    function normalizeEdgeNodeId(value) {
+        if (value === undefined || value === null) {
+            return null;
+        }
+        if (typeof value === "object") {
+            if (value.id !== undefined && value.id !== null) {
+                return String(value.id);
+            }
+            if (value.node_id !== undefined && value.node_id !== null) {
+                return String(value.node_id);
+            }
+            return null;
+        }
+        return String(value);
+    }
+
+    function getEdgeSourceId(edge) {
+        if (!edge || typeof edge !== "object") {
+            return null;
+        }
+        return normalizeEdgeNodeId(edge.source);
+    }
+
+    function getEdgeTargetId(edge) {
+        if (!edge || typeof edge !== "object") {
+            return null;
+        }
+        return normalizeEdgeNodeId(edge.target);
+    }
+
+    function getOrderedNodeIds(nodes) {
+        const seen = {};
+        const orderedIds = [];
+        nodes.forEach(function (node, index) {
+            const nodeId = getGraphNodeId(node, index);
+            if (seen[nodeId]) {
+                return;
+            }
+            seen[nodeId] = true;
+            orderedIds.push(nodeId);
+        });
+        orderedIds.sort(compareTreeNodeIds);
+        return orderedIds;
+    }
+
+    function isNumericNodeId(nodeId) {
+        return /^-?\d+(\.\d+)?$/.test(String(nodeId));
+    }
+
+    function compareTreeNodeIds(a, b) {
+        const left = String(a);
+        const right = String(b);
+        const leftNumeric = isNumericNodeId(left);
+        const rightNumeric = isNumericNodeId(right);
+
+        if (leftNumeric && rightNumeric) {
+            return Number(left) - Number(right);
+        }
+
+        return left.localeCompare(right, undefined, {
+            numeric: true,
+            sensitivity: "base"
+        });
+    }
+
+    function buildAdjacency(nodes, edges, isDirected) {
+        const nodeIds = getOrderedNodeIds(nodes);
+        const nodeIdSet = new Set(nodeIds);
+        const adjacency = new Map();
+        nodeIds.forEach(function (nodeId) {
+            adjacency.set(nodeId, new Set());
+        });
+
+        edges.forEach(function (edge) {
+            const sourceId = getEdgeSourceId(edge);
+            const targetId = getEdgeTargetId(edge);
+            if (!sourceId || !targetId || !nodeIdSet.has(sourceId) || !nodeIdSet.has(targetId)) {
+                return;
+            }
+
+            adjacency.get(sourceId).add(targetId);
+            if (!isDirected) {
+                adjacency.get(targetId).add(sourceId);
+            }
+        });
+
+        return adjacency;
+    }
+
+    function getTreeGraphSignature(nodes, edges) {
+        const nodeIds = getOrderedNodeIds(nodes);
+        const nodePart = nodeIds.join("|");
+        const edgePart = edges.map(function (edge) {
+            const sourceId = getEdgeSourceId(edge) || "";
+            const targetId = getEdgeTargetId(edge) || "";
+            return `${sourceId}->${targetId}`;
+        }).sort().join("|");
+        return `${nodePart}::${edgePart}`;
+    }
+
+    function syncTreeUIState(nodeIds, signature) {
+        let shouldReset = state.treeUI.lastGraphId !== state.activeGraphId;
+        if (!shouldReset && state.treeUI.lastGraphSignature && state.treeUI.lastGraphSignature !== signature) {
+            shouldReset = true;
+        }
+
+        if (!shouldReset) {
+            const nodeIdSet = new Set(nodeIds);
+            const expandedIds = Object.keys(state.treeUI.expanded);
+            for (let i = 0; i < expandedIds.length; i += 1) {
+                if (!nodeIdSet.has(expandedIds[i])) {
+                    shouldReset = true;
+                    break;
+                }
+            }
+        }
+
+        if (shouldReset) {
+            state.treeUI.expanded = {};
+            state.treeUI.autoExpandedOnce = false;
+        }
+
+        state.treeUI.lastGraphId = state.activeGraphId;
+        state.treeUI.lastGraphSignature = signature;
+    }
+
+    function renderTreeNodeHtml(nodeId, nodeById, adjacency) {
+        const node = nodeById.get(nodeId) || {};
+        const attributeEntries = getTreeNodeAttributeEntries(node);
+        const neighborIds = Array.from(adjacency.get(nodeId) || []).sort(compareTreeNodeIds);
+        const hasAttributes = attributeEntries.length > 0;
+        const hasNeighbors = neighborIds.length > 0;
+        const isExpandable = hasAttributes || hasNeighbors;
+        const isExpanded = isExpandable && Boolean(state.treeUI.expanded[nodeId]);
+        const isSelected = state.selectedNodeId === nodeId;
+        const selectedClass = isSelected ? " is-selected" : "";
+
+        let toggleHtml = '<span class="tree-toggle-placeholder" aria-hidden="true"></span>';
+        if (isExpandable) {
+            toggleHtml = [
+                `<button class="tree-toggle" type="button" aria-expanded="${isExpanded ? "true" : "false"}"`,
+                ` aria-label="${isExpanded ? "Collapse" : "Expand"}">${isExpanded ? "−" : "+"}</button>`
+            ].join("");
+        }
+
+        const label = escapeHtml(getTreeNodeLabel(node, nodeId));
+        let childrenHtml = "";
+        if (isExpandable) {
+            const attrItems = attributeEntries.map(function (attr) {
+                return `<li class="tree-attr">${escapeHtml(attr.key)}: ${escapeHtml(formatTreeAttributeValue(attr.value))}</li>`;
+            }).join("");
+
+            const neighborSection = hasNeighbors ? '<li class="tree-section">Neighbors</li>' : "";
+            const neighborItems = neighborIds.map(function (neighborId) {
+                const neighborLabel = escapeHtml(getTreeNodeLabel(nodeById.get(neighborId), neighborId));
+                return [
+                    '<li class="tree-ref">',
+                    `<button class="tree-ref-btn" type="button" data-node-id="${escapeHtml(neighborId)}">`,
+                    `&rarr; ${neighborLabel}`,
+                    "</button>",
+                    "</li>"
+                ].join("");
+            }).join("");
+
+            const hiddenAttr = isExpanded ? "" : " hidden";
+            childrenHtml = `<ul class="tree-children"${hiddenAttr}>${attrItems}${neighborSection}${neighborItems}</ul>`;
+        }
+
+        return [
+            `<li class="tree-node${selectedClass}" data-node-id="${escapeHtml(nodeId)}">`,
+            '<div class="tree-row">',
+            toggleHtml,
+            `<button class="tree-label" type="button">${label}</button>`,
+            "</div>",
+            childrenHtml,
+            "</li>"
+        ].join("");
+    }
+
+    function getTreeNodeSelector(nodeId) {
+        if (!nodeId) {
+            return null;
+        }
+        if (window.CSS && typeof window.CSS.escape === "function") {
+            return `.tree-node[data-node-id="${window.CSS.escape(String(nodeId))}"]`;
+        }
+        return `.tree-node[data-node-id="${String(nodeId).replace(/"/g, '\\"')}"]`;
     }
 
     function scrollTreeSelectionIntoView(treeView) {
@@ -1141,9 +1392,20 @@
             return;
         }
 
-        const escapedNodeId = CSS.escape(String(state.selectedNodeId));
-        const selectedNodeEl = treeView.querySelector(`[data-node-id="${escapedNodeId}"]`);
+        const selector = getTreeNodeSelector(state.selectedNodeId);
+        if (!selector) {
+            return;
+        }
+
+        const selectedNodeEl = treeView.querySelector(selector);
         if (!selectedNodeEl) {
+            return;
+        }
+
+        const containerRect = treeView.getBoundingClientRect();
+        const nodeRect = selectedNodeEl.getBoundingClientRect();
+        const isVisible = nodeRect.top >= containerRect.top && nodeRect.bottom <= containerRect.bottom;
+        if (isVisible) {
             return;
         }
 
@@ -1162,33 +1424,113 @@
 
         if (!hasLoadedGraph()) {
             treeView.innerHTML = "";
+            resetTreeState();
             return;
         }
 
         const nodes = getNodes();
+        const edges = getEdges();
         if (!nodes.length) {
             treeView.innerHTML = "";
             return;
         }
 
-        const treeItems = nodes.map(function (node) {
-            const rawNodeId = node.id !== undefined && node.id !== null ? String(node.id) : "unknown";
-            const isSelected = rawNodeId === state.selectedNodeId;
-            const selectedClass = isSelected ? " selected" : "";
-            const marker = isSelected ? "●" : "○";
-            const label = node.label ? ` - ${escapeHtml(node.label)}` : "";
-            return [
-                `<li class="tree-item${selectedClass}">`,
-                `<button type="button" class="tree-node-button" data-node-id="${escapeHtml(rawNodeId)}">`,
-                `<span class="tree-marker">${marker}</span><span>${escapeHtml(rawNodeId)}${label}</span>`,
-                "</button>",
-                "</li>"
-            ].join("");
+        const nodeById = new Map();
+        const nodeIds = [];
+        nodes.forEach(function (node, index) {
+            const nodeId = getGraphNodeId(node, index);
+            if (!nodeById.has(nodeId)) {
+                nodeById.set(nodeId, node || {});
+                nodeIds.push(nodeId);
+            }
+        });
+        nodeIds.sort(compareTreeNodeIds);
+
+        if (!nodeIds.length) {
+            treeView.innerHTML = "";
+            return;
+        }
+
+        syncTreeUIState(nodeIds, getTreeGraphSignature(nodes, edges));
+        const adjacency = buildAdjacency(nodes, edges, state.isDirected);
+        const rootHtml = nodeIds.map(function (nodeId) {
+            return renderTreeNodeHtml(nodeId, nodeById, adjacency);
         }).join("");
 
-        treeView.innerHTML = `<ul class="tree-list">${treeItems}</ul>`;
-        bindTreeNodeClicks(treeView);
+        treeView.innerHTML = `<ul class="tree-explorer">${rootHtml}</ul>`;
         scrollTreeSelectionIntoView(treeView);
+    }
+
+    function bindTreeViewInteractions() {
+        const treeView = document.getElementById("tree-view-content");
+        if (!treeView || treeView.dataset.treeBindings === "ready") {
+            return;
+        }
+        treeView.dataset.treeBindings = "ready";
+
+        treeView.addEventListener("click", function (event) {
+            const toggleButton = event.target.closest(".tree-toggle");
+            if (toggleButton && treeView.contains(toggleButton)) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const nodeEl = toggleButton.closest(".tree-node");
+                if (!nodeEl) {
+                    return;
+                }
+
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (!nodeId) {
+                    return;
+                }
+
+                const isAlreadySelected = state.selectedNodeId === nodeId;
+                state.treeUI.expanded[nodeId] = !Boolean(state.treeUI.expanded[nodeId]);
+
+                if (isAlreadySelected) {
+                    renderTreeView();
+                    postSelectedNodeToIframe();
+                    return;
+                }
+
+                setSelectedNode(nodeId);
+                return;
+            }
+
+            const refButton = event.target.closest(".tree-ref-btn");
+            if (refButton && treeView.contains(refButton)) {
+                const refNodeId = refButton.getAttribute("data-node-id");
+                if (!refNodeId) {
+                    return;
+                }
+
+                const refAlreadySelected = state.selectedNodeId === refNodeId;
+                setSelectedNode(refNodeId);
+                if (refAlreadySelected) {
+                    postSelectedNodeToIframe();
+                }
+                return;
+            }
+
+            const labelButton = event.target.closest(".tree-label");
+            if (labelButton && treeView.contains(labelButton)) {
+                const nodeEl = labelButton.closest(".tree-node");
+                if (!nodeEl) {
+                    return;
+                }
+
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (!nodeId) {
+                    return;
+                }
+
+                const isAlreadySelected = state.selectedNodeId === nodeId;
+                setSelectedNode(nodeId);
+                if (isAlreadySelected) {
+                    postSelectedNodeToIframe();
+                }
+            }
+        });
     }
 
     function renderBirdView() {
@@ -1283,6 +1625,7 @@
         bindFileInputControls();
         bindVisualizerTabClicks();
         bindGraphFetchControls();
+        bindTreeViewInteractions();
         bindIframeSelectionMessages();
         renderAll();
     });
