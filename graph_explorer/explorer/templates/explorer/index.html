@@ -23,12 +23,15 @@
 
             <section id="search-area" class="toolbar-group compact-group toolbar-column">
                 <h2 class="group-title">Search</h2>
-                <input
-                    id="search-input"
-                    type="text"
-                    placeholder="Search nodes or edges"
-                    aria-label="Search text"
-                >
+                <div class="search-row">
+                    <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Search nodes or edges"
+                        aria-label="Search text"
+                    >
+                    <button id="search-query-button" type="button" class="placeholder-button">Search</button>
+                </div>
                 <p id="search-preview" class="toolbar-feedback">Current search: none</p>
             </section>
 
@@ -56,15 +59,17 @@
                         aria-label="Filter value"
                     >
                     <div class="toolbar-actions">
-                        <button id="apply-query-button" type="button" class="placeholder-button">Apply</button>
-                        <button id="clear-query-state-button" type="button" class="placeholder-button secondary-button">Clear</button>
+                        <button id="apply-query-button" type="button" class="placeholder-button">Filter</button>
                     </div>
                 </div>
             </section>
         </div>
 
         <section id="applied-queries-area" class="toolbar-group tags-row chips-row">
-            <p id="applied-query-count" class="toolbar-feedback">0 applied</p>
+            <div class="chips-header">
+                <p id="applied-query-count" class="toolbar-feedback">0 applied</p>
+                <button id="clear-query-state-button" type="button" class="placeholder-button secondary-button">Clear</button>
+            </div>
             <div id="applied-query-tags" aria-live="polite"></div>
             <p id="applied-query-empty" class="toolbar-feedback">No applied queries</p>
         </section>
