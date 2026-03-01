@@ -1,3 +1,4 @@
+import datetime
 from typing import Optional, List, Callable
 from api.graph_api.model import Graph, Node, Edge
 
@@ -85,9 +86,48 @@ class Workspace:
         """Return nodes whose label contains the given substring."""
         return self.filter_nodes(lambda n: label_substr.lower() in n.label.lower())
 
-    def find_nodes_by_attribute(self, attribute: str, operator: str, value):
-        import datetime
+    def find_nodes_by_query_contains(
+        self, query: str, allowed_node_ids: Optional[set[str]] = None
+    ) -> List[Node]:
+        if not self._current_graph:
+            return []
 
+        normalized_query = str(query).strip().casefold()
+        if not normalized_query:
+            return []
+
+        def stringify(value) -> str:
+            if isinstance(value, (datetime.date, datetime.datetime)):
+                return value.isoformat()
+            if value is None:
+                return ""
+            return str(value)
+
+        matched_nodes: List[Node] = []
+        for node in self._current_graph.nodes:
+            if allowed_node_ids is not None and node.node_id not in allowed_node_ids:
+                continue
+
+            if normalized_query in stringify(node.label).casefold():
+                matched_nodes.append(node)
+                continue
+
+            if normalized_query in stringify(node.node_id).casefold():
+                matched_nodes.append(node)
+                continue
+
+            attributes = node.attributes if isinstance(node.attributes, dict) else {}
+            for key, value in attributes.items():
+                if normalized_query in stringify(key).casefold():
+                    matched_nodes.append(node)
+                    break
+                if normalized_query in stringify(value).casefold():
+                    matched_nodes.append(node)
+                    break
+
+        return matched_nodes
+
+    def find_nodes_by_attribute(self, attribute: str, operator: str, value):
         def coerce(v):
             if isinstance(v, (int, float, bool)):
                 return v

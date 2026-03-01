@@ -209,27 +209,35 @@ def graph_search_api(request: HttpRequest) -> JsonResponse:
     if not workspace:
         return _json_error("Graph not found", 404)
 
-    matched_nodes = workspace.find_nodes_by_label(query)
+    current_graph = (
+        ACTIVE_GRAPHS.get(graph_id)
+        or ORIGINAL_GRAPHS.get(graph_id)
+        or workspace.get_graph()
+    )
+    allowed_node_ids = {n.node_id for n in current_graph.nodes} if current_graph else None
 
-    if not matched_nodes:
-        return JsonResponse({"ok": True, "matched_ids": [], "graph": {"nodes": [], "edges": []}})
+    if workspace.get_graph() is None or workspace.get_graph() is not current_graph:
+        if current_graph is not None:
+            workspace.set_graph(current_graph)
 
+    matched_nodes = workspace.find_nodes_by_query_contains(query, allowed_node_ids=allowed_node_ids)
     matched_ids = {n.node_id for n in matched_nodes}
 
+    edges_source = current_graph.edges if current_graph else workspace.list_edges()
     matched_edges = [
-        e for e in workspace.list_edges()
+        e for e in edges_source
         if e.source in matched_ids and e.target in matched_ids
     ]
 
     if Graph is not None and Node is not None and Edge is not None:
-        original_graph = ORIGINAL_GRAPHS.get(graph_id)
-        directed = getattr(original_graph, "directed", True) if original_graph else True
+        directed = getattr(current_graph, "directed", True)
         filtered_graph = Graph(directed=directed)
         for node in matched_nodes:
             filtered_graph.add_node(node)
         for edge in matched_edges:
             filtered_graph.add_edge(edge)
         ACTIVE_GRAPHS[graph_id] = filtered_graph
+        workspace.set_graph(filtered_graph)
 
     subgraph = {
         "nodes": [n.to_dict() for n in matched_nodes],
