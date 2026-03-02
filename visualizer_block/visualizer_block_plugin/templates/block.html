@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <style>
         html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
-        #viz-scroll { width: 100%; height: 100%; overflow: auto; background: #fafafa; }
-        #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; }
+        #viz-scroll { width: 100%; height: 100%; overflow: hidden; background: #fafafa; }
+        #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; cursor: grab; touch-action: none; }
+        #viz-svg:active { cursor: grabbing; }
         .block-container {
             border: 1px solid #333;
             background-color: #fff;
@@ -55,17 +56,37 @@
         /* Nice scroll for small elements */
         .scroll-active::-webkit-scrollbar { width: 4px; }
         .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
-        foreignObject.gv-node { cursor: pointer; }
+        foreignObject.gv-node { cursor: move; }
         foreignObject.gv-node.selected .block-container {
             outline: 3px solid #ff6a00;
             outline-offset: -3px;
             box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.15);
         }
+        #viz-tooltip {
+            position: fixed;
+            display: none;
+            max-width: 320px;
+            z-index: 1000;
+            background: #fff;
+            border: 1px solid #d0d0d0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            padding: 8px 10px;
+            border-radius: 6px;
+            pointer-events: none;
+            font: 12px/1.35 Arial, sans-serif;
+            color: #222;
+            white-space: pre-line;
+        }
+        #viz-tooltip .tooltip-title {
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #111;
+        }
     </style>
 </head>
 <body>
     <div id="viz-scroll">
-    <svg id="viz-svg" width="{{ width }}" height="{{ height }}">
+    <svg id="viz-svg" width="{{ width }}" height="{{ height }}" data-zoom-scale="1" data-pan-x="0" data-pan-y="0">
         <defs>
             {# Dodajemo malu marginu (+3) da strelica ne dodiruje samu ivicu teksta #}
             <marker id="arrowhead" markerWidth="10" markerHeight="7"
@@ -74,70 +95,168 @@
             </marker>
         </defs>
 
-        <!-- Edges -->
-        {% for edge in edges %}
-            {% set src = positions[edge.source] %}
-            {% set dst = positions[edge.target] %}
-            <line x1="{{ src.x }}" y1="{{ src.y }}"
-                  x2="{{ dst.x }}" y2="{{ dst.y }}"
-                  stroke-width="{{ 1.5 * scale }}"
-                  {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
-        {% endfor %}
+        <g id="viz-root">
+            <g id="viz-edges">
+                {% for edge in edges %}
+                    {% set src = positions[edge.source] %}
+                    {% set dst = positions[edge.target] %}
+                    <line class="gv-edge"
+                          data-source="{{ edge.source }}"
+                          data-target="{{ edge.target }}"
+                          x1="{{ src.x }}" y1="{{ src.y }}"
+                          x2="{{ dst.x }}" y2="{{ dst.y }}"
+                          stroke-width="{{ 1.5 * scale }}"
+                          {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
+                {% endfor %}
+            </g>
 
-        <!-- Nodes as Blocks -->
-        {% for node in nodes %}
-            {% set pos = positions[node.node_id] %}
-            <foreignObject x="{{ pos.top_x }}" y="{{ pos.top_y }}"
-                           width="{{ block_w }}" height="{{ block_h }}"
-                           class="gv-node"
-                           data-node-id="{{ node.node_id }}">
+            <g id="viz-nodes">
+                {% for node in nodes %}
+                    {% set pos = positions[node.node_id] %}
+                    <foreignObject x="{{ pos.top_x }}" y="{{ pos.top_y }}"
+                                   width="{{ block_w }}" height="{{ block_h }}"
+                                   class="gv-node"
+                                   data-node-id="{{ node.node_id }}"
+                                   data-attrs='{{ node.attributes|default({})|tojson }}'>
 
-                <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
-                     style="font-size: {{ font_size }}px;">
+                        <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                             style="font-size: {{ font_size }}px;">
 
-                    <div class="block-header">
-                        {{ node.label if node.label else node.node_id }}
-                    </div>
+                            <div class="block-header">
+                                {{ node.label if node.label else node.node_id }}
+                            </div>
 
-                    <!-- Decorator logic -->
-                    <div class="attr-scroll-area {{ 'scroll-active' if node.needs_scroll else '' }}">
-                        <table class="attr-table">
-                            {% if node.attributes %}
-                                {% for key, value in node.attributes.items() %}
-                                <tr>
-                                    <td class="key">{{ key }}</td>
-                                    <td class="val">{{ value }}</td>
-                                </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
-                                        No attributes
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </table>
-                    </div>
-                </div>
-            </foreignObject>
-        {% endfor %}
+                            <!-- Decorator logic -->
+                            <div class="attr-scroll-area {{ 'scroll-active' if node.needs_scroll else '' }}">
+                                <table class="attr-table">
+                                    {% if node.attributes %}
+                                        {% for key, value in node.attributes.items() %}
+                                        <tr>
+                                            <td class="key">{{ key }}</td>
+                                            <td class="val">{{ value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
+                                                No attributes
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                        </div>
+                    </foreignObject>
+                {% endfor %}
+            </g>
+        </g>
     </svg>
     </div>
+    <div id="viz-tooltip" role="tooltip"></div>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
         (function () {
             "use strict";
 
+            if (!window.d3) {
+                return;
+            }
+
+            const svgEl = document.getElementById("viz-svg");
             const scrollContainer = document.getElementById("viz-scroll");
-            const nodes = Array.from(document.querySelectorAll("[data-node-id]"));
-            const nodesById = new Map();
+            const tooltipEl = document.getElementById("viz-tooltip");
+            if (!svgEl || !scrollContainer || !tooltipEl) {
+                return;
+            }
+
+            const svg = d3.select(svgEl);
+            const root = d3.select("#viz-root");
+            const nodeSelection = d3.selectAll("#viz-nodes [data-node-id]");
+            const edgeSelection = d3.selectAll("#viz-edges line[data-source][data-target]");
+            const nodes = nodeSelection.nodes();
+            const nodePositions = new Map();
+            const edgesByNode = new Map();
             let selectedNodeId = null;
+            let currentTransform = d3.zoomIdentity;
+
+            function escapeHtml(value) {
+                return String(value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
+            function parseFloatSafe(value, fallback) {
+                const parsed = parseFloat(String(value || ""));
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }
+
+            function getEdgeList(nodeId) {
+                if (!edgesByNode.has(nodeId)) {
+                    edgesByNode.set(nodeId, []);
+                }
+                return edgesByNode.get(nodeId);
+            }
 
             nodes.forEach(function (nodeEl) {
                 const nodeId = nodeEl.getAttribute("data-node-id");
                 if (nodeId) {
-                    nodesById.set(nodeId, nodeEl);
+                    nodePositions.set(nodeId, {
+                        x: parseFloatSafe(nodeEl.getAttribute("x"), 0),
+                        y: parseFloatSafe(nodeEl.getAttribute("y"), 0),
+                        width: parseFloatSafe(nodeEl.getAttribute("width"), 0),
+                        height: parseFloatSafe(nodeEl.getAttribute("height"), 0)
+                    });
                 }
             });
+
+            edgeSelection.each(function () {
+                const edgeEl = this;
+                const source = edgeEl.getAttribute("data-source");
+                const target = edgeEl.getAttribute("data-target");
+                if (!source || !target) {
+                    return;
+                }
+                getEdgeList(source).push(edgeEl);
+                getEdgeList(target).push(edgeEl);
+            });
+
+            function getNodeCenter(nodeId) {
+                const pos = nodePositions.get(nodeId);
+                if (!pos) {
+                    return null;
+                }
+                return {
+                    x: pos.x + (pos.width / 2),
+                    y: pos.y + (pos.height / 2)
+                };
+            }
+
+            function updateEdge(edgeEl) {
+                const source = edgeEl.getAttribute("data-source");
+                const target = edgeEl.getAttribute("data-target");
+                if (!source || !target) {
+                    return;
+                }
+                const sourceCenter = getNodeCenter(source);
+                const targetCenter = getNodeCenter(target);
+                if (!sourceCenter || !targetCenter) {
+                    return;
+                }
+                edgeEl.setAttribute("x1", String(sourceCenter.x));
+                edgeEl.setAttribute("y1", String(sourceCenter.y));
+                edgeEl.setAttribute("x2", String(targetCenter.x));
+                edgeEl.setAttribute("y2", String(targetCenter.y));
+            }
+
+            function updateEdgesForNode(nodeId) {
+                const edges = edgesByNode.get(nodeId) || [];
+                for (let i = 0; i < edges.length; i += 1) {
+                    updateEdge(edges[i]);
+                }
+            }
 
             function setSelectedNode(nodeId) {
                 selectedNodeId = nodeId === null || nodeId === undefined || nodeId === "" ? null : String(nodeId);
@@ -147,41 +266,187 @@
                 });
             }
 
+            function applyTransform(transform) {
+                currentTransform = transform;
+                root.attr("transform", transform.toString());
+                svg.attr("data-zoom-scale", String(transform.k));
+                svg.attr("data-pan-x", String(transform.x));
+                svg.attr("data-pan-y", String(transform.y));
+                if (window.parent) {
+                    window.parent.postMessage(
+                        { type: "mainTransform", k: transform.k, x: transform.x, y: transform.y },
+                        "*"
+                    );
+                }
+            }
+
             function focusNode(nodeId) {
                 if (!scrollContainer || !nodeId) {
                     return;
                 }
-                const nodeEl = nodesById.get(String(nodeId));
-                if (!nodeEl) {
+                const center = getNodeCenter(String(nodeId));
+                if (!center) {
                     return;
                 }
-
-                const containerRect = scrollContainer.getBoundingClientRect();
-                const nodeRect = nodeEl.getBoundingClientRect();
-                const centerX = scrollContainer.scrollLeft + (nodeRect.left - containerRect.left) + (nodeRect.width / 2);
-                const centerY = scrollContainer.scrollTop + (nodeRect.top - containerRect.top) + (nodeRect.height / 2);
-                const maxLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth);
-                const maxTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-                const targetLeft = Math.max(0, Math.min(maxLeft, centerX - (scrollContainer.clientWidth / 2)));
-                const targetTop = Math.max(0, Math.min(maxTop, centerY - (scrollContainer.clientHeight / 2)));
-
-                scrollContainer.scrollTo({
-                    left: targetLeft,
-                    top: targetTop,
-                    behavior: "smooth"
-                });
+                const scale = currentTransform && Number.isFinite(currentTransform.k) && currentTransform.k > 0
+                    ? currentTransform.k
+                    : 1;
+                const targetX = (scrollContainer.clientWidth / 2) - (center.x * scale);
+                const targetY = (scrollContainer.clientHeight / 2) - (center.y * scale);
+                const nextTransform = d3.zoomIdentity.translate(targetX, targetY).scale(scale);
+                svg.transition().duration(220).call(zoom.transform, nextTransform);
             }
 
-            nodes.forEach(function (nodeEl) {
-                nodeEl.addEventListener("click", function () {
+            function readNodeAttrs(nodeEl) {
+                const raw = nodeEl.getAttribute("data-attrs");
+                if (!raw) {
+                    return {};
+                }
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === "object") {
+                        return parsed;
+                    }
+                } catch (error) {
+                    // Invalid payload is ignored and tooltip falls back to node id only.
+                }
+                return {};
+            }
+
+            function renderTooltip(nodeId, attrs) {
+                const keys = Object.keys(attrs || {});
+                const lines = [];
+                for (let i = 0; i < keys.length && lines.length < 8; i += 1) {
+                    const key = keys[i];
+                    lines.push("<div><strong>" + escapeHtml(key) + ":</strong> " + escapeHtml(attrs[key]) + "</div>");
+                }
+
+                tooltipEl.innerHTML =
+                    "<div class=\"tooltip-title\">Node: " + escapeHtml(nodeId) + "</div>" +
+                    (lines.length ? lines.join("") : "<div>No attributes</div>");
+            }
+
+            function positionTooltip(event) {
+                const offset = 12;
+                tooltipEl.style.display = "block";
+                let left = (event.clientX || 0) + offset;
+                let top = (event.clientY || 0) + offset;
+                const tooltipRect = tooltipEl.getBoundingClientRect();
+                if (left + tooltipRect.width > window.innerWidth - 8) {
+                    left = Math.max(8, window.innerWidth - tooltipRect.width - 8);
+                }
+                if (top + tooltipRect.height > window.innerHeight - 8) {
+                    top = Math.max(8, window.innerHeight - tooltipRect.height - 8);
+                }
+                tooltipEl.style.left = left + "px";
+                tooltipEl.style.top = top + "px";
+            }
+
+            function showTooltip(event, nodeEl) {
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (!nodeId) {
+                    return;
+                }
+                renderTooltip(nodeId, readNodeAttrs(nodeEl));
+                positionTooltip(event);
+            }
+
+            function hideTooltip() {
+                tooltipEl.style.display = "none";
+            }
+
+            const zoom = d3.zoom()
+                .scaleExtent([0.2, 4])
+                .filter(function (event) {
+                    if (event.type === "dblclick") {
+                        return false;
+                    }
+                    if (event.type === "wheel") {
+                        const target = event.target;
+                        if (target && typeof target.closest === "function" && target.closest(".attr-scroll-area.scroll-active")) {
+                            return false;
+                        }
+                        return true;
+                    }
+                    if (event.type === "mousedown") {
+                        const target = event.target;
+                        if (target && typeof target.closest === "function") {
+                            return !target.closest("[data-node-id]");
+                        }
+                        return true;
+                    }
+                    return true;
+                })
+                .on("zoom", function (event) {
+                    applyTransform(event.transform);
+                });
+
+            const drag = d3.drag()
+                .on("start", function (event) {
+                    hideTooltip();
+                    if (event.sourceEvent) {
+                        event.sourceEvent.stopPropagation();
+                    }
+                })
+                .on("drag", function (event) {
+                    const nodeEl = this;
                     const nodeId = nodeEl.getAttribute("data-node-id");
+                    if (!nodeId) {
+                        return;
+                    }
+                    const nodePos = nodePositions.get(nodeId);
+                    if (!nodePos) {
+                        return;
+                    }
+                    const scale = currentTransform && Number.isFinite(currentTransform.k) && currentTransform.k > 0
+                        ? currentTransform.k
+                        : 1;
+                    nodePos.x += event.dx / scale;
+                    nodePos.y += event.dy / scale;
+                    d3.select(nodeEl)
+                        .attr("x", String(nodePos.x))
+                        .attr("y", String(nodePos.y));
+                    updateEdgesForNode(nodeId);
+                });
+
+            svg.call(zoom);
+            svg.on("dblclick.zoom", null);
+            svgEl.addEventListener("wheel", function (event) {
+                const target = event.target;
+                if (target && typeof target.closest === "function" && target.closest(".attr-scroll-area.scroll-active")) {
+                    return;
+                }
+                event.preventDefault();
+            }, { passive: false });
+
+            nodeSelection
+                .call(drag)
+                .on("mouseenter", function (event) {
+                    showTooltip(event, this);
+                })
+                .on("mousemove", function (event) {
+                    showTooltip(event, this);
+                })
+                .on("mouseleave", function () {
+                    hideTooltip();
+                })
+                .on("click", function (event) {
+                    if (event.defaultPrevented) {
+                        return;
+                    }
+                    const nodeId = this.getAttribute("data-node-id");
                     setSelectedNode(nodeId);
                     focusNode(nodeId);
                     if (window.parent) {
                         window.parent.postMessage({ type: "nodeSelected", nodeId: nodeId }, "*");
+                        window.parent.postMessage({ type: "selectNode", nodeId: nodeId }, "*");
                     }
                 });
+
+            edgeSelection.each(function () {
+                updateEdge(this);
             });
+            applyTransform(d3.zoomIdentity);
 
             window.addEventListener("message", function (event) {
                 const message = event.data;
