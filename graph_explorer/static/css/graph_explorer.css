@@ -520,6 +520,23 @@ body {
     padding: 0.45rem;
 }
 
+#bird-view-content {
+    overflow: hidden;
+    padding: 0.35rem;
+}
+
+.bird-iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+}
+
+#bird-view-iframe {
+    pointer-events: none;
+}
+
 .view-meta {
     margin: 0 0 0.4rem;
     font-size: 0.86rem;
