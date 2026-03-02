@@ -331,6 +331,35 @@
         return 1;
     }
 
+    function getMainPanOffset(context, axis) {
+        const sourceContext = context || getMainVisualizerContext();
+        if (!sourceContext || !sourceContext.mainSvg) {
+            return 0;
+        }
+
+        const attrName = axis === "y" ? "data-pan-y" : "data-pan-x";
+        const datasetKey = axis === "y" ? "panY" : "panX";
+        const candidates = [
+            sourceContext.mainSvg.getAttribute(attrName),
+            sourceContext.mainSvg.dataset ? sourceContext.mainSvg.dataset[datasetKey] : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.documentElement
+                ? sourceContext.iframeDoc.documentElement.getAttribute(attrName)
+                : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.body
+                ? sourceContext.iframeDoc.body.getAttribute(attrName)
+                : null
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parseFloat(candidates[i] || "");
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+
+        return 0;
+    }
+
     function syncBirdIframeToMain() {
         const mainIframe = document.getElementById("main-view-visualizer-iframe");
         const birdIframe = document.getElementById("bird-view-iframe");
@@ -549,8 +578,10 @@
         }
         const birdRect = ensureBirdViewportRect(birdDoc, birdSvg);
         const zoomScale = getMainZoomScale(sourceContext);
-        const visibleGraphX = sourceContext.scrollEl.scrollLeft / zoomScale;
-        const visibleGraphY = sourceContext.scrollEl.scrollTop / zoomScale;
+        const panX = getMainPanOffset(sourceContext, "x");
+        const panY = getMainPanOffset(sourceContext, "y");
+        const visibleGraphX = (sourceContext.scrollEl.scrollLeft - panX) / zoomScale;
+        const visibleGraphY = (sourceContext.scrollEl.scrollTop - panY) / zoomScale;
         const visibleGraphW = sourceContext.scrollEl.clientWidth / zoomScale;
         const visibleGraphH = sourceContext.scrollEl.clientHeight / zoomScale;
 
@@ -604,7 +635,7 @@
             });
             birdViewSync.boundMainSvgObserver.observe(context.mainSvg, {
                 attributes: true,
-                attributeFilter: ["style", "data-zoom-scale", "viewBox", "transform"]
+                attributeFilter: ["style", "data-zoom-scale", "data-pan-x", "data-pan-y", "viewBox", "transform"]
             });
             birdViewSync.boundMainSvg = context.mainSvg;
         }
