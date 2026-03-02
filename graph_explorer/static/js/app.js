@@ -11,8 +11,17 @@
     const GRAPH_FILTER_ENDPOINT = "/api/graph/filter/";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
+    const SVG_NS = "http://www.w3.org/2000/svg";
     let graphFetchSuccessHideTimeoutId = null;
     let visualizerRenderRequestSequence = 0;
+    const birdViewSync = {
+        boundScrollEl: null,
+        boundScrollHandler: null,
+        boundMainSvg: null,
+        boundMainSvgObserver: null,
+        viewportUpdatePending: false,
+        viewportUpdateRafId: null
+    };
 
     const state = {
         activeVisualizer: "simple",
@@ -216,6 +225,414 @@
             return [];
         }
         return state.graph.edges;
+    }
+
+    function clearBirdScrollSync() {
+        if (birdViewSync.boundScrollEl && birdViewSync.boundScrollHandler) {
+            birdViewSync.boundScrollEl.removeEventListener("scroll", birdViewSync.boundScrollHandler);
+        }
+        birdViewSync.boundScrollEl = null;
+        birdViewSync.boundScrollHandler = null;
+        birdViewSync.boundMainSvg = null;
+        if (birdViewSync.boundMainSvgObserver) {
+            birdViewSync.boundMainSvgObserver.disconnect();
+            birdViewSync.boundMainSvgObserver = null;
+        }
+    }
+
+    function clearBirdViewportUpdateSchedule() {
+        if (birdViewSync.viewportUpdateRafId !== null) {
+            cancelAnimationFrame(birdViewSync.viewportUpdateRafId);
+        }
+        birdViewSync.viewportUpdatePending = false;
+        birdViewSync.viewportUpdateRafId = null;
+    }
+
+    function getMainVisualizerContext() {
+        const iframe = document.getElementById("main-view-visualizer-iframe");
+        if (!iframe || !iframe.contentDocument) {
+            return null;
+        }
+
+        const iframeDoc = iframe.contentDocument;
+        const mainSvg = iframeDoc.getElementById("viz-svg");
+        const scrollEl = iframeDoc.getElementById("viz-scroll");
+        if (!mainSvg || !scrollEl) {
+            return null;
+        }
+
+        const viewBox = mainSvg.viewBox && mainSvg.viewBox.baseVal ? mainSvg.viewBox.baseVal : null;
+        let width = parseFloat(mainSvg.getAttribute("width") || "");
+        let height = parseFloat(mainSvg.getAttribute("height") || "");
+
+        if ((!Number.isFinite(width) || width <= 0) && viewBox) {
+            width = Number(viewBox.width);
+        }
+        if ((!Number.isFinite(height) || height <= 0) && viewBox) {
+            height = Number(viewBox.height);
+        }
+
+        if (!Number.isFinite(width) || width <= 0) {
+            width = Number(scrollEl.scrollWidth);
+        }
+        if (!Number.isFinite(height) || height <= 0) {
+            height = Number(scrollEl.scrollHeight);
+        }
+
+        if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+            return null;
+        }
+
+        return {
+            iframe: iframe,
+            iframeDoc: iframeDoc,
+            mainSvg: mainSvg,
+            scrollEl: scrollEl,
+            width: width,
+            height: height
+        };
+    }
+
+    function getMainZoomScale(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        if (!sourceContext || !sourceContext.mainSvg) {
+            return 1;
+        }
+
+        const candidates = [
+            sourceContext.mainSvg.getAttribute("data-zoom-scale"),
+            sourceContext.mainSvg.dataset ? sourceContext.mainSvg.dataset.zoomScale : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.documentElement
+                ? sourceContext.iframeDoc.documentElement.getAttribute("data-zoom-scale")
+                : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.body
+                ? sourceContext.iframeDoc.body.getAttribute("data-zoom-scale")
+                : null
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parseFloat(candidates[i] || "");
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+
+        const transformValue = sourceContext.mainSvg.style && sourceContext.mainSvg.style.transform
+            ? sourceContext.mainSvg.style.transform
+            : "";
+        const match = transformValue.match(/scale\(([-\d.]+)(?:\s*,\s*[-\d.]+)?\)/);
+        if (match) {
+            const parsedScale = parseFloat(match[1] || "");
+            if (Number.isFinite(parsedScale) && parsedScale > 0) {
+                return parsedScale;
+            }
+        }
+
+        return 1;
+    }
+
+    function syncBirdIframeToMain() {
+        const mainIframe = document.getElementById("main-view-visualizer-iframe");
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!mainIframe || !birdIframe) {
+            return;
+        }
+
+        const srcdoc = mainIframe.getAttribute("srcdoc") || mainIframe.srcdoc;
+        if (!srcdoc) {
+            return;
+        }
+
+        if ((birdIframe.getAttribute("srcdoc") || "") === srcdoc) {
+            return;
+        }
+
+        birdIframe.setAttribute("srcdoc", srcdoc);
+    }
+
+    function computeBirdGraphBounds(svg) {
+        const viewportRect = svg.querySelector("#bird-viewport-rect");
+        let viewportRectNextSibling = null;
+        if (viewportRect && viewportRect.parentNode === svg) {
+            viewportRectNextSibling = viewportRect.nextSibling;
+            svg.removeChild(viewportRect);
+        }
+
+        try {
+            const bb = svg.getBBox();
+            if (bb && bb.width > 0 && bb.height > 0) {
+                return {
+                    x: bb.x,
+                    y: bb.y,
+                    width: bb.width,
+                    height: bb.height
+                };
+            }
+        } catch {
+            // Fallback to manual bounds scan.
+        } finally {
+            if (viewportRect && viewportRect.parentNode !== svg) {
+                if (viewportRectNextSibling) {
+                    svg.insertBefore(viewportRect, viewportRectNextSibling);
+                } else {
+                    svg.appendChild(viewportRect);
+                }
+            }
+        }
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const addPoint = function (x, y) {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return;
+            }
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        };
+
+        const lines = svg.querySelectorAll("line");
+        for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i];
+            addPoint(parseFloat(line.getAttribute("x1") || ""), parseFloat(line.getAttribute("y1") || ""));
+            addPoint(parseFloat(line.getAttribute("x2") || ""), parseFloat(line.getAttribute("y2") || ""));
+        }
+
+        const circles = svg.querySelectorAll("circle");
+        for (let i = 0; i < circles.length; i += 1) {
+            const circle = circles[i];
+            const cx = parseFloat(circle.getAttribute("cx") || "");
+            const cy = parseFloat(circle.getAttribute("cy") || "");
+            const r = parseFloat(circle.getAttribute("r") || "");
+            if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r)) {
+                continue;
+            }
+            addPoint(cx - r, cy - r);
+            addPoint(cx + r, cy + r);
+        }
+
+        const foreignObjects = svg.querySelectorAll("foreignObject");
+        for (let i = 0; i < foreignObjects.length; i += 1) {
+            const fo = foreignObjects[i];
+            const x = parseFloat(fo.getAttribute("x") || "");
+            const y = parseFloat(fo.getAttribute("y") || "");
+            const width = parseFloat(fo.getAttribute("width") || "");
+            const height = parseFloat(fo.getAttribute("height") || "");
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+                continue;
+            }
+            addPoint(x, y);
+            addPoint(x + width, y + height);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+        }
+
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        };
+    }
+
+    function ensureBirdViewportRect(birdDoc, svg) {
+        let rect = birdDoc.getElementById("bird-viewport-rect");
+        if (!rect) {
+            rect = birdDoc.createElementNS(SVG_NS, "rect");
+            rect.id = "bird-viewport-rect";
+        }
+
+        rect.setAttribute("fill", "none");
+        rect.setAttribute("stroke", "#ff3b30");
+        rect.style.vectorEffect = "non-scaling-stroke";
+        rect.style.strokeWidth = "3px";
+        rect.style.pointerEvents = "none";
+        rect.setAttribute("x", rect.getAttribute("x") || "0");
+        rect.setAttribute("y", rect.getAttribute("y") || "0");
+        rect.setAttribute("width", rect.getAttribute("width") || "0");
+        rect.setAttribute("height", rect.getAttribute("height") || "0");
+        svg.appendChild(rect);
+        return rect;
+    }
+
+    function configureBirdIframeDocument() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const scrollEl = birdDoc.getElementById("viz-scroll");
+        const svg = birdDoc.getElementById("viz-svg");
+        if (!svg) {
+            return;
+        }
+
+        if (scrollEl) {
+            scrollEl.style.overflow = "hidden";
+            scrollEl.style.width = "100%";
+            scrollEl.style.height = "100%";
+            scrollEl.scrollLeft = 0;
+            scrollEl.scrollTop = 0;
+        }
+        if (birdDoc.documentElement) {
+            birdDoc.documentElement.style.overflow = "hidden";
+        }
+        if (birdDoc.body) {
+            birdDoc.body.style.overflow = "hidden";
+            birdDoc.body.style.margin = "0";
+            birdDoc.body.style.height = "100%";
+        }
+
+        const bounds = computeBirdGraphBounds(svg);
+        if (bounds && bounds.width > 0 && bounds.height > 0) {
+            const pad = 20;
+            svg.setAttribute("viewBox", `${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}`);
+        }
+
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+        ensureBirdViewportRect(birdDoc, svg);
+    }
+
+    function getCssEscapedAttributeValue(value) {
+        const str = String(value);
+        if (window.CSS && typeof window.CSS.escape === "function") {
+            return window.CSS.escape(str);
+        }
+        return str.replace(/["\\]/g, "\\$&");
+    }
+
+    function updateBirdSelectionHighlight() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const nodeEls = birdDoc.querySelectorAll("[data-node-id]");
+        for (let i = 0; i < nodeEls.length; i += 1) {
+            nodeEls[i].classList.remove("selected");
+        }
+
+        if (!state.selectedNodeId) {
+            return;
+        }
+
+        const escapedId = getCssEscapedAttributeValue(state.selectedNodeId);
+        const selectedNodeEl = birdDoc.querySelector(`[data-node-id="${escapedId}"]`);
+        if (selectedNodeEl) {
+            selectedNodeEl.classList.add("selected");
+        }
+    }
+
+    function updateBirdViewportRect(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!sourceContext || !birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const birdSvg = birdDoc.getElementById("viz-svg");
+        if (!birdSvg) {
+            return;
+        }
+        const birdRect = ensureBirdViewportRect(birdDoc, birdSvg);
+        const zoomScale = getMainZoomScale(sourceContext);
+        const visibleGraphX = sourceContext.scrollEl.scrollLeft / zoomScale;
+        const visibleGraphY = sourceContext.scrollEl.scrollTop / zoomScale;
+        const visibleGraphW = sourceContext.scrollEl.clientWidth / zoomScale;
+        const visibleGraphH = sourceContext.scrollEl.clientHeight / zoomScale;
+
+        birdRect.setAttribute("x", String(visibleGraphX));
+        birdRect.setAttribute("y", String(visibleGraphY));
+        birdRect.setAttribute("width", String(visibleGraphW));
+        birdRect.setAttribute("height", String(visibleGraphH));
+    }
+
+    function refreshBirdViewportAndFocus(context) {
+        updateBirdViewportRect(context);
+        updateBirdSelectionHighlight();
+    }
+
+    function scheduleBirdViewportAndFocusUpdate() {
+        if (birdViewSync.viewportUpdatePending) {
+            return;
+        }
+        birdViewSync.viewportUpdatePending = true;
+        birdViewSync.viewportUpdateRafId = requestAnimationFrame(function () {
+            birdViewSync.viewportUpdatePending = false;
+            birdViewSync.viewportUpdateRafId = null;
+            refreshBirdViewportAndFocus();
+        });
+    }
+
+    function bindBirdViewportSync() {
+        const context = getMainVisualizerContext();
+        if (!context || !context.scrollEl) {
+            clearBirdScrollSync();
+            clearBirdViewportUpdateSchedule();
+            return;
+        }
+
+        if (birdViewSync.boundScrollEl !== context.scrollEl || !birdViewSync.boundScrollHandler) {
+            clearBirdScrollSync();
+            const onScroll = function () {
+                scheduleBirdViewportAndFocusUpdate();
+            };
+            context.scrollEl.addEventListener("scroll", onScroll, { passive: true });
+            birdViewSync.boundScrollEl = context.scrollEl;
+            birdViewSync.boundScrollHandler = onScroll;
+        }
+
+        if (birdViewSync.boundMainSvg !== context.mainSvg) {
+            if (birdViewSync.boundMainSvgObserver) {
+                birdViewSync.boundMainSvgObserver.disconnect();
+            }
+            birdViewSync.boundMainSvgObserver = new MutationObserver(function () {
+                scheduleBirdViewportAndFocusUpdate();
+            });
+            birdViewSync.boundMainSvgObserver.observe(context.mainSvg, {
+                attributes: true,
+                attributeFilter: ["style", "data-zoom-scale", "viewBox", "transform"]
+            });
+            birdViewSync.boundMainSvg = context.mainSvg;
+        }
+
+        refreshBirdViewportAndFocus(context);
+    }
+
+    function bindBirdIframeLifecycle() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || birdIframe.dataset.birdLifecycleBound === "true") {
+            return;
+        }
+
+        birdIframe.dataset.birdLifecycleBound = "true";
+        birdIframe.addEventListener("load", function () {
+            configureBirdIframeDocument();
+            updateBirdSelectionHighlight();
+            scheduleBirdViewportAndFocusUpdate();
+        });
+    }
+
+    function renderBirdMinimapFromIframe() {
+        bindBirdIframeLifecycle();
+        syncBirdIframeToMain();
+        configureBirdIframeDocument();
+        bindBirdViewportSync();
+        updateBirdSelectionHighlight();
+        scheduleBirdViewportAndFocusUpdate();
     }
 
     function getNodeById(nodeId) {
@@ -1075,6 +1492,9 @@
             iframe.style.height = "100%";
             iframe.style.border = "0";
             iframe.addEventListener("load", function () {
+                bindBirdViewportSync();
+                renderBirdMinimapFromIframe();
+                refreshBirdViewportAndFocus();
                 postSelectedNodeToIframe();
             });
             container.appendChild(iframe);
@@ -1088,7 +1508,11 @@
     function bindIframeSelectionMessages() {
         window.addEventListener("message", function (event) {
             const message = event.data;
-            if (!message || typeof message !== "object" || message.type !== "nodeSelected") {
+            if (!message || typeof message !== "object") {
+                return;
+            }
+
+            if (message.type !== "nodeSelected" && message.type !== "selectNode") {
                 return;
             }
 
@@ -1096,8 +1520,9 @@
                 return;
             }
 
-            const iframe = document.getElementById("main-view-visualizer-iframe");
-            if (!iframe || !iframe.contentWindow || event.source !== iframe.contentWindow) {
+            const mainIframe = document.getElementById("main-view-visualizer-iframe");
+            const fromMain = Boolean(mainIframe && mainIframe.contentWindow && event.source === mainIframe.contentWindow);
+            if (!fromMain) {
                 return;
             }
 
@@ -1534,38 +1959,19 @@
     }
 
     function renderBirdView() {
-        const birdView = document.getElementById("bird-view-content");
-        if (!birdView) {
-            return;
-        }
-
+        bindBirdIframeLifecycle();
         if (!hasLoadedGraph()) {
-            birdView.innerHTML = "";
+            clearBirdScrollSync();
+            clearBirdViewportUpdateSchedule();
+            const birdIframe = document.getElementById("bird-view-iframe");
+            if (birdIframe) {
+                birdIframe.setAttribute("srcdoc", "");
+            }
             return;
         }
 
-        const nodes = getNodes();
-        const edges = getEdges();
-        const selectedNode = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
-
-        let selectedSummary = "";
-        if (selectedNode) {
-            const selectedAttrs = getNodeAttributes(selectedNode, 2)
-                .map(function (attr) {
-                    return `${escapeHtml(attr.key)}=${escapeHtml(attr.value)}`;
-                })
-                .join(", ");
-            selectedSummary = [
-                `<p class="view-meta">Selected node: <strong>${escapeHtml(selectedNode.id)}</strong></p>`,
-                `<p class="view-meta">${selectedAttrs || "No additional attributes"}</p>`
-            ].join("");
-        }
-
-        birdView.innerHTML = [
-            `<p class="view-meta">Graph id: ${escapeHtml(state.activeGraphId || "")}</p>`,
-            `<p class="view-meta">Nodes: ${nodes.length} | Edges: ${edges.length}</p>`,
-            selectedSummary
-        ].join("");
+        renderBirdMinimapFromIframe();
+        refreshBirdViewportAndFocus();
     }
 
     function renderUIState() {
@@ -1627,6 +2033,9 @@
         bindGraphFetchControls();
         bindTreeViewInteractions();
         bindIframeSelectionMessages();
+        window.addEventListener("resize", function () {
+            renderBirdView();
+        });
         renderAll();
     });
 })();
