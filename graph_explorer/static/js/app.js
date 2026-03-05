@@ -6,7 +6,7 @@
     // TODO: replace mock data state with platform/API integration payloads.
     const DEFAULT_FILTER_OPERATOR = "==";
     const GRAPH_LOAD_ENDPOINT = "/api/graph/load/";
-    const CLI_EXECUTE_ENDPOINT = "/api/cli/execute";
+    const CLI_EXECUTE_ENDPOINT = "/api/cli/execute/";
     const GRAPH_SEARCH_ENDPOINT = "/api/graph/search/";
     const GRAPH_FILTER_ENDPOINT = "/api/graph/filter/";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
@@ -1192,6 +1192,16 @@
         });
         pushConsoleOutputLine(result.message);
         renderConsole();
+
+        //Refresh
+        if (result.ok && result.payload && result.payload.graph) {
+            const newGraph = result.payload.graph;
+            if (isValidGraphShape(newGraph)) {
+                state.graph = toGraphState(newGraph); // Update graph in JS
+                renderAll();                          // update tree/bird
+                loadVisualizerOutput();               // new svg
+            }
+        }
     }
 
     function clearConsoleState() {

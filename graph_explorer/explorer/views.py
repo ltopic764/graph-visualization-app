@@ -1,7 +1,9 @@
 import os
+import shlex
 import time
 import json
 import logging
+from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -170,23 +172,108 @@ def index(request: HttpRequest) -> HttpResponse:
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
 
+# Parse sent properties
+def _parse_properties(tokens: list[str]) -> dict:
+    props = {}
+    i = 0
+    while i < len(tokens):
+        if tokens[i] == "--property":
+            if i + 1 >= len(tokens):
+                raise ValueError("Missing value after --property (expected key=value)")
+            kv = tokens[i + 1]
+            if "=" not in kv:
+                raise ValueError(f"Invalid property '{kv}' (expected key=value)")
+            k, v = kv.split("=", 1)
+            props[k] = v
+            i += 2
+        else:
+            i += 1
+    return props
+
+def _parse_flag(tokens: list[str], name: str) -> str | None:
+    # Looking for --id=123
+    for i, t in enumerate(tokens):
+        if t.startswith(name + "="):
+            return t.split("=", 1)[1]
+        if t == name and i + 1 < len(tokens):
+            return tokens[i + 1]
+    return None
 
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
-    if method_error:
-        return method_error
+    if method_error: return method_error
 
-    _, error_response = _parse_json_body(request)
-    if error_response:
-        return error_response
+    body, error_response = _parse_json_body(request)
+    if error_response: return error_response
 
-    return json_error(
-        status_code=501,
-        error="NotImplemented",
-        message="CLI command execution is not implemented yet.",
-        expected={"graph_id": "string|null", "command": "string"},
-    )
+    graph_id = body.get("graph_id")
+    command = (body.get("command") or "").strip()
+
+    if not graph_id or not command:
+        return _json_error("graph_id and command are required", status=400)
+
+    workspace = WORKSPACES.get(graph_id)
+    if not workspace:
+        return _json_error("Workspace not found", status=404)
+
+    try:
+        tokens = shlex.split(command)
+        if len(tokens) < 2:
+            raise ValueError("Invalid command. format: [action] [subject] --flags")
+
+        action = tokens[0].lower()  # create / edit / delete
+        subject = tokens[1].lower()  # node / edge
+
+        # All flags extraction
+        obj_id = _parse_flag(tokens, "--id")
+        props = _parse_properties(tokens)
+
+        """TO-DO: placeholder for node logic"""
+        if subject == "node":
+            if action == "create":
+                pass
+            elif action == "edit":
+                pass
+            elif action == "delete":
+                pass
+            else:
+                raise ValueError(f"Unknown action '{action}' for node")
+
+        elif subject == "edge":
+            if action == "create":
+                source = _parse_flag(tokens, "--source")
+                target = _parse_flag(tokens, "--target")
+                if not source or not target:
+                    raise ValueError("Edge creation requires --source and --target")
+                workspace.create_edge(source_id=source, target_id=target, edge_id=obj_id, properties=props)
+                msg = f"OK: Created edge between {source} and {target}"
+            elif action == "edit":
+                if not obj_id: raise ValueError("Missing --id for edge edit")
+                workspace.edit_edge(edge_id=obj_id, properties=props)
+                msg = f"OK: Edited edge {obj_id}"
+            elif action == "delete":
+                if not obj_id: raise ValueError("Missing --id for edge deletion")
+                workspace.delete_edge(edge_id=obj_id)
+                msg = f"OK: Deleted edge {obj_id}"
+            else:
+                raise ValueError(f"Unknown action '{action}' for edge")
+
+        else:
+            raise ValueError(f"Unknown subject '{subject}'. Use 'node' or 'edge'.")
+
+        # Update global map and save graph state
+        updated_graph = workspace.get_graph()
+        ACTIVE_GRAPHS[graph_id] = updated_graph
+
+        return JsonResponse({
+            "ok": True,
+            "message": msg,
+            "graph": updated_graph.to_dict()
+        }, status=200)
+
+    except Exception as exc:
+        return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
 
 
 @csrf_exempt
