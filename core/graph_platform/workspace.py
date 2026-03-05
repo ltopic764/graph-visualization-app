@@ -199,3 +199,60 @@ class Workspace:
     def find_edges_by_attribute(self, key: str, value: str) -> List[Edge]:
         """Return edges where attribute[key] == value."""
         return self.filter_edges(lambda e: e.attributes.get(key) == value)
+
+    # ==========================================================
+    # EDGE OPERATIONS
+    # ==========================================================
+
+    def create_edge(self, source_id: str, target_id: str, edge_id: Optional[str], properties: dict) -> None:
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        # Check if nodes exist
+        if not self._current_graph.get_node(source_id):
+            raise ValueError(f"Source node '{source_id}' does not exist")
+        if not self._current_graph.get_node(target_id):
+            raise ValueError(f"Target node '{target_id}' does not exist")
+
+        # ID check
+        if edge_id and any(e.edge_id == edge_id for e in self._current_graph.edges):
+            raise ValueError(f"Edge '{edge_id}' already exists")
+
+        # Get weight if exist in properties
+        weight = float(properties.pop("weight", 1.0))
+
+        edge = Edge(
+            source=source_id,
+            target=target_id,
+            edge_id=edge_id,
+            weight=weight,
+            attributes=properties
+        )
+        self._current_graph.add_edge(edge)
+
+    def edit_edge(self, edge_id: str, properties: dict) -> None:
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        # Find
+        edge = next((e for e in self._current_graph.edges if e.edge_id == edge_id), None)
+        if edge is None:
+            raise ValueError(f"Edge '{edge_id}' not found")
+
+        # Update weight if sent
+        if "weight" in properties:
+            edge.weight = float(properties.pop("weight"))
+
+        # Update other properties
+        for k, v in properties.items():
+            edge.attributes[k] = v
+
+    def delete_edge(self, edge_id: str) -> None:
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        initial_count = len(self._current_graph.edges)
+        self._current_graph.edges = [e for e in self._current_graph.edges if e.edge_id != edge_id]
+
+        if len(self._current_graph.edges) == initial_count:
+            raise ValueError(f"Edge '{edge_id}' not found")
