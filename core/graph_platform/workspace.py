@@ -1,4 +1,5 @@
 import datetime
+from multiprocessing.managers import Value
 from typing import Optional, List, Callable
 from api.graph_api.model import Graph, Node, Edge
 
@@ -49,6 +50,53 @@ class Workspace:
     # ==========================================================
     # NODE OPERATIONS
     # ==========================================================
+
+    # Method for creating a new Node for CLI implementation
+    def create_node(self, node_id: str, properties: dict) -> None:
+        # Create a new Node with id and attributes
+        # If an id already exists throw error
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        if self._current_graph.get_node(str(node_id)) is not None:
+            raise ValueError(f"Node '{node_id}' already exists")
+
+        node = Node(node_id=str(node_id), attributes=properties or {})
+        self._current_graph.add_node(node)
+
+    # Method for editing an existing Node for CLI implementation
+    def edit_node(self, node_id: str, properties: dict) -> None:
+        # Edit existing node attributes
+
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        node = self._current_graph.get_node(str(node_id))
+        if node is None:
+            raise ValueError(f"Node '{node_id}' not found")
+
+        for k, v in (properties or {}).items():
+            node.attributes[k] = v # update
+
+    # Method for deleting an existing Node for CLI implementation
+    def delete_node(self, node_id: str) -> None:
+        # Deleting a Node only if he is not connected to any edge
+        if not self._current_graph:
+            raise ValueError("No active graph loaded")
+
+        node_id = str(node_id)
+        node = self._current_graph.get_node(node_id)
+        if node is None:
+            raise ValueError(f"Node '{node_id}' not found")
+
+        attached = [e for e in self._current_graph.edges if e.source == node_id or e.target == node_id]
+        if attached:
+            raise ValueError(
+                f"Node '{node_id}' has {len(attached)} connected edge(s)"
+                f"Delete edges first"
+            )
+
+        self._current_graph.nodes = [n for n in self._current_graph.nodes if n.node_id != node_id]
 
     def list_nodes(self) -> List[Node]:
         if not self._current_graph:
