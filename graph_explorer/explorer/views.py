@@ -174,23 +174,6 @@ def index(request: HttpRequest) -> HttpResponse:
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
 
-# Parse sent properties
-def _parse_properties(tokens: list[str]) -> dict:
-    props = {}
-    i = 0
-    while i < len(tokens):
-        if tokens[i] == "--property":
-            if i + 1 >= len(tokens):
-                raise ValueError("Missing value after --property (expected key=value)")
-            kv = tokens[i + 1]
-            if "=" not in kv:
-                raise ValueError(f"Invalid property '{kv}' (expected key=value)")
-            k, v = kv.split("=", 1)
-            props[k] = v
-            i += 2
-        else:
-            i += 1
-    return props
 
 def _parse_flag(tokens: list[str], name: str) -> str | None:
     # Looking for --id=123
@@ -234,16 +217,6 @@ def _parse_properties(tokens: list[str]) -> dict:
         else:
             i += 1
     return props
-
-def _parse_flag(tokens: list[str], name: str) -> str | None:
-    # Looking for --id=123
-    for i, t in enumerate(tokens):
-        if t.startswith(name + "="):
-            return t.split("=", 1)[1]
-        if t == name and i + 1 < len(tokens):
-            return tokens[i + 1]
-    return None
-
 
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
