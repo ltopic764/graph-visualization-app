@@ -16,12 +16,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from core.graph_platform.workspace import Workspace
+#from test_search_filter import workspace
+
 WORKSPACES = {}
 
 try:
-    from graph_api.model.edge import Edge
-    from graph_api.model.graph import Graph
-    from graph_api.model.node import Node
+    from api.graph_api.model.edge import Edge
+    from api.graph_api.model.graph import Graph
+    from api.graph_api.model.node import Node
 except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
     Graph = None  # type: ignore[assignment]
     Node = None  # type: ignore[assignment]
@@ -31,7 +33,7 @@ else:
     GRAPH_IMPORT_ERROR = None
 
 try:
-    from visualizer_simple_plugin.plugin import SimpleVisualizer
+    from visualizer_simple.visualizer_simple_plugin.plugin import SimpleVisualizer
 except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
     SimpleVisualizer = None  # type: ignore[assignment]
     SIMPLE_VISUALIZER_IMPORT_ERROR = exc
@@ -39,7 +41,7 @@ else:
     SIMPLE_VISUALIZER_IMPORT_ERROR = None
 
 try:
-    from visualizer_block_plugin.plugin import BlockVisualizer
+    from visualizer_block.visualizer_block_plugin.plugin import BlockVisualizer
 except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
     BlockVisualizer = None  # type: ignore[assignment]
     BLOCK_VISUALIZER_IMPORT_ERROR = exc
@@ -47,7 +49,7 @@ else:
     BLOCK_VISUALIZER_IMPORT_ERROR = None
 
 try:
-    from datasource_json_plugin.plugin import JsonDatasourcePlugin
+    from datasource_json.datasource_json_plugin.plugin import JsonDatasourcePlugin
 except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
     JsonDatasourcePlugin = None  # type: ignore[assignment]
     JSON_DATASOURCE_IMPORT_ERROR = exc
@@ -55,7 +57,7 @@ else:
     JSON_DATASOURCE_IMPORT_ERROR = None
 
 try:
-    from datasource_csv_plugin.plugin import CsvDatasourcePlugin
+    from datasource_csv.datasource_csv_plugin.plugin import CsvDatasourcePlugin
 except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
     CsvDatasourcePlugin = None  # type: ignore[assignment]
     CSV_DATASOURCE_IMPORT_ERROR = exc
@@ -199,6 +201,50 @@ def _parse_flag(tokens: list[str], name: str) -> str | None:
             return tokens[i + 1]
     return None
 
+def _clone_graph(graph: Graph) -> Graph:
+    # Create a DEEPCOPY of the original graph
+    g2 = Graph(directed=getattr(graph, "directed", True))
+    # Clone nodes
+    for n in graph.nodes:
+        g2.add_node(Node(node_id=str(n.node_id), label=getattr(n, "label", "") or str(n.node_id),
+                         attributes=deepcopy(getattr(n, "attributes", {}) or {})))
+    # Clone edges
+    for e in graph.edges:
+        g2.add_edge(Edge(source=str(e.source), target=str(e.target),
+                         edge_id=getattr(e, "edge_id", None),
+                         weight=getattr(e, "weight", 1.0),
+                         directed=getattr(e, "directed", True),
+                         attributes=deepcopy(getattr(e, "attributes", {}) or {})))
+    return g2
+
+# Parse sent properties
+def _parse_properties(tokens: list[str]) -> dict:
+    props = {}
+    i = 0
+    while i < len(tokens):
+        if tokens[i] == "--property":
+            i += 1
+            while i < len(tokens) and not tokens[i].startswith("--"):
+                kv = tokens[i]
+                if "=" not in kv:
+                    raise ValueError(f"Invalid property '{kv}' (expected key=value)")
+                k, v = kv.split("=", 1)
+                props[k] = v
+                i += 1
+        else:
+            i += 1
+    return props
+
+def _parse_flag(tokens: list[str], name: str) -> str | None:
+    # Looking for --id=123
+    for i, t in enumerate(tokens):
+        if t.startswith(name + "="):
+            return t.split("=", 1)[1]
+        if t == name and i + 1 < len(tokens):
+            return tokens[i + 1]
+    return None
+
+
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
@@ -229,17 +275,9 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
         obj_id = _parse_flag(tokens, "--id")
         props = _parse_properties(tokens)
 
-        """TO-DO: placeholder for node logic"""
         if subject == "node":
-            if action == "create":
-                pass
-            elif action == "edit":
-                pass
-            elif action == "delete":
-                pass
-            else:
-                raise ValueError(f"Unknown action '{action}' for node")
-
+            msg = _execute_node_command(workspace, tokens)
+        
         elif subject == "edge":
             if action == "create":
                 source = _parse_flag(tokens, "--source")
@@ -275,6 +313,39 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
     except Exception as exc:
         return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
 
+
+def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
+    # Execute only command for node objects
+    if len(tokens) < 2:
+        raise ValueError("Invalid command. Use: create/edit/delete node ...")
+
+    action = tokens[0].lower() # create/edit/delete
+    subject = tokens[1].lower() # node
+
+    if subject != "node":
+        raise ValueError("Only node commands are supported here")
+
+    node_id = _parse_flag(tokens, "--id")
+    if not node_id:
+        raise ValueError("Missing --id from node command")
+
+    props = _parse_properties(tokens)
+
+    # Actions
+
+    if action == "create":
+        workspace.create_node(node_id=node_id, properties=props)
+        return f"Ok: created node {node_id}"
+
+    if action == "edit":
+        workspace.edit_node(node_id=node_id, properties=props)
+        return f"Ok: edited node {node_id}"
+
+    if action == "delete":
+        workspace.delete_node(node_id=node_id)
+        return f"Ok: deleted node {node_id}"
+
+    raise ValueError("Unknown action. Use create/edit/delete")
 
 @csrf_exempt
 def graph_search_api(request: HttpRequest) -> JsonResponse:
@@ -411,13 +482,26 @@ def workspace_reset_api(request: HttpRequest) -> JsonResponse:
     if not original_graph:
         return _json_error("Graph not found", 404)
 
-    # Vrati originalni graf
+    #Vrati originalni graf
     ACTIVE_GRAPHS[graph_id] = original_graph
 
     return JsonResponse({
         "ok": True,
         "graph": original_graph.to_dict()
     })
+
+    # original_graph = ORIGINAL_GRAPHS.get(graph_id)
+    # if not original_graph:
+    #     return _json_error("Graph not found", 404)
+    #
+    # fresh = _clone_graph(original_graph)
+    # ACTIVE_GRAPHS[graph_id] = fresh
+    #
+    # workspace = WORKSPACES.get(graph_id)
+    # if workspace:
+    #     workspace.set_graph(fresh)
+    #
+    # return JsonResponse({"ok": True, "graph": fresh.to_dict()})
 
 
 @csrf_exempt
@@ -448,6 +532,7 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
         graph_id = str(uuid4())
         ACTIVE_GRAPHS[graph_id] = graph
         ORIGINAL_GRAPHS[graph_id] = graph
+        #ORIGINAL_GRAPHS[graph_id] = _clone_graph(graph)
         workspace = Workspace()
         workspace.set_graph(graph)
         WORKSPACES[graph_id] = workspace
