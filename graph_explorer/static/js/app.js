@@ -6,13 +6,22 @@
     // TODO: replace mock data state with platform/API integration payloads.
     const DEFAULT_FILTER_OPERATOR = "==";
     const GRAPH_LOAD_ENDPOINT = "/api/graph/load/";
-    const CLI_EXECUTE_ENDPOINT = "/api/cli/execute";
+    const CLI_EXECUTE_ENDPOINT = "/api/cli/execute/";
     const GRAPH_SEARCH_ENDPOINT = "/api/graph/search/";
     const GRAPH_FILTER_ENDPOINT = "/api/graph/filter/";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
+    const SVG_NS = "http://www.w3.org/2000/svg";
     let graphFetchSuccessHideTimeoutId = null;
     let visualizerRenderRequestSequence = 0;
+    const birdViewSync = {
+        boundScrollEl: null,
+        boundScrollHandler: null,
+        boundMainSvg: null,
+        boundMainSvgObserver: null,
+        viewportUpdatePending: false,
+        viewportUpdateRafId: null
+    };
 
     const state = {
         activeVisualizer: "simple",
@@ -49,6 +58,12 @@
             isCollapsed: true,
             maxHistory: 20,
             maxOutputLines: 120
+        },
+        treeUI: {
+            expanded: {},
+            lastGraphId: null,
+            lastGraphSignature: "",
+            autoExpandedOnce: false
         }
     };
 
@@ -93,11 +108,19 @@
         state.visualizerRender.renderedIsDirected = null;
     }
 
+    function resetTreeState() {
+        state.treeUI.expanded = {};
+        state.treeUI.lastGraphId = null;
+        state.treeUI.lastGraphSignature = "";
+        state.treeUI.autoExpandedOnce = false;
+    }
+
     function clearLoadedGraphState() {
         state.activeGraphId = null;
         state.graph = null;
         state.selectedNodeId = null;
         resetVisualizerRenderState("idle", null);
+        resetTreeState();
     }
 
     async function loadGraphData(file) {
@@ -202,6 +225,445 @@
             return [];
         }
         return state.graph.edges;
+    }
+
+    function clearBirdScrollSync() {
+        if (birdViewSync.boundScrollEl && birdViewSync.boundScrollHandler) {
+            birdViewSync.boundScrollEl.removeEventListener("scroll", birdViewSync.boundScrollHandler);
+        }
+        birdViewSync.boundScrollEl = null;
+        birdViewSync.boundScrollHandler = null;
+        birdViewSync.boundMainSvg = null;
+        if (birdViewSync.boundMainSvgObserver) {
+            birdViewSync.boundMainSvgObserver.disconnect();
+            birdViewSync.boundMainSvgObserver = null;
+        }
+    }
+
+    function clearBirdViewportUpdateSchedule() {
+        if (birdViewSync.viewportUpdateRafId !== null) {
+            cancelAnimationFrame(birdViewSync.viewportUpdateRafId);
+        }
+        birdViewSync.viewportUpdatePending = false;
+        birdViewSync.viewportUpdateRafId = null;
+    }
+
+    function getMainVisualizerContext() {
+        const iframe = document.getElementById("main-view-visualizer-iframe");
+        if (!iframe || !iframe.contentDocument) {
+            return null;
+        }
+
+        const iframeDoc = iframe.contentDocument;
+        const mainSvg = iframeDoc.getElementById("viz-svg");
+        const scrollEl = iframeDoc.getElementById("viz-scroll");
+        if (!mainSvg || !scrollEl) {
+            return null;
+        }
+
+        const viewBox = mainSvg.viewBox && mainSvg.viewBox.baseVal ? mainSvg.viewBox.baseVal : null;
+        let width = parseFloat(mainSvg.getAttribute("width") || "");
+        let height = parseFloat(mainSvg.getAttribute("height") || "");
+
+        if ((!Number.isFinite(width) || width <= 0) && viewBox) {
+            width = Number(viewBox.width);
+        }
+        if ((!Number.isFinite(height) || height <= 0) && viewBox) {
+            height = Number(viewBox.height);
+        }
+
+        if (!Number.isFinite(width) || width <= 0) {
+            width = Number(scrollEl.scrollWidth);
+        }
+        if (!Number.isFinite(height) || height <= 0) {
+            height = Number(scrollEl.scrollHeight);
+        }
+
+        if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+            return null;
+        }
+
+        return {
+            iframe: iframe,
+            iframeDoc: iframeDoc,
+            mainSvg: mainSvg,
+            scrollEl: scrollEl,
+            width: width,
+            height: height
+        };
+    }
+
+    function getMainZoomScale(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        if (!sourceContext || !sourceContext.mainSvg) {
+            return 1;
+        }
+
+        const candidates = [
+            sourceContext.mainSvg.getAttribute("data-zoom-scale"),
+            sourceContext.mainSvg.dataset ? sourceContext.mainSvg.dataset.zoomScale : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.documentElement
+                ? sourceContext.iframeDoc.documentElement.getAttribute("data-zoom-scale")
+                : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.body
+                ? sourceContext.iframeDoc.body.getAttribute("data-zoom-scale")
+                : null
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parseFloat(candidates[i] || "");
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+
+        const transformValue = sourceContext.mainSvg.style && sourceContext.mainSvg.style.transform
+            ? sourceContext.mainSvg.style.transform
+            : "";
+        const match = transformValue.match(/scale\(([-\d.]+)(?:\s*,\s*[-\d.]+)?\)/);
+        if (match) {
+            const parsedScale = parseFloat(match[1] || "");
+            if (Number.isFinite(parsedScale) && parsedScale > 0) {
+                return parsedScale;
+            }
+        }
+
+        return 1;
+    }
+
+    function getMainPanOffset(context, axis) {
+        const sourceContext = context || getMainVisualizerContext();
+        if (!sourceContext || !sourceContext.mainSvg) {
+            return 0;
+        }
+
+        const attrName = axis === "y" ? "data-pan-y" : "data-pan-x";
+        const datasetKey = axis === "y" ? "panY" : "panX";
+        const candidates = [
+            sourceContext.mainSvg.getAttribute(attrName),
+            sourceContext.mainSvg.dataset ? sourceContext.mainSvg.dataset[datasetKey] : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.documentElement
+                ? sourceContext.iframeDoc.documentElement.getAttribute(attrName)
+                : null,
+            sourceContext.iframeDoc && sourceContext.iframeDoc.body
+                ? sourceContext.iframeDoc.body.getAttribute(attrName)
+                : null
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parseFloat(candidates[i] || "");
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+
+        return 0;
+    }
+
+    function syncBirdIframeToMain() {
+        const mainIframe = document.getElementById("main-view-visualizer-iframe");
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!mainIframe || !birdIframe) {
+            return;
+        }
+
+        const srcdoc = mainIframe.getAttribute("srcdoc") || mainIframe.srcdoc;
+        if (!srcdoc) {
+            return;
+        }
+
+        if ((birdIframe.getAttribute("srcdoc") || "") === srcdoc) {
+            return;
+        }
+
+        birdIframe.setAttribute("srcdoc", srcdoc);
+    }
+
+    function computeBirdGraphBounds(svg) {
+        const viewportRect = svg.querySelector("#bird-viewport-rect");
+        let viewportRectNextSibling = null;
+        if (viewportRect && viewportRect.parentNode === svg) {
+            viewportRectNextSibling = viewportRect.nextSibling;
+            svg.removeChild(viewportRect);
+        }
+
+        try {
+            const bb = svg.getBBox();
+            if (bb && bb.width > 0 && bb.height > 0) {
+                return {
+                    x: bb.x,
+                    y: bb.y,
+                    width: bb.width,
+                    height: bb.height
+                };
+            }
+        } catch {
+            // Fallback to manual bounds scan.
+        } finally {
+            if (viewportRect && viewportRect.parentNode !== svg) {
+                if (viewportRectNextSibling) {
+                    svg.insertBefore(viewportRect, viewportRectNextSibling);
+                } else {
+                    svg.appendChild(viewportRect);
+                }
+            }
+        }
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const addPoint = function (x, y) {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return;
+            }
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        };
+
+        const lines = svg.querySelectorAll("line");
+        for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i];
+            addPoint(parseFloat(line.getAttribute("x1") || ""), parseFloat(line.getAttribute("y1") || ""));
+            addPoint(parseFloat(line.getAttribute("x2") || ""), parseFloat(line.getAttribute("y2") || ""));
+        }
+
+        const circles = svg.querySelectorAll("circle");
+        for (let i = 0; i < circles.length; i += 1) {
+            const circle = circles[i];
+            const cx = parseFloat(circle.getAttribute("cx") || "");
+            const cy = parseFloat(circle.getAttribute("cy") || "");
+            const r = parseFloat(circle.getAttribute("r") || "");
+            if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r)) {
+                continue;
+            }
+            addPoint(cx - r, cy - r);
+            addPoint(cx + r, cy + r);
+        }
+
+        const foreignObjects = svg.querySelectorAll("foreignObject");
+        for (let i = 0; i < foreignObjects.length; i += 1) {
+            const fo = foreignObjects[i];
+            const x = parseFloat(fo.getAttribute("x") || "");
+            const y = parseFloat(fo.getAttribute("y") || "");
+            const width = parseFloat(fo.getAttribute("width") || "");
+            const height = parseFloat(fo.getAttribute("height") || "");
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+                continue;
+            }
+            addPoint(x, y);
+            addPoint(x + width, y + height);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+        }
+
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        };
+    }
+
+    function ensureBirdViewportRect(birdDoc, svg) {
+        let rect = birdDoc.getElementById("bird-viewport-rect");
+        if (!rect) {
+            rect = birdDoc.createElementNS(SVG_NS, "rect");
+            rect.id = "bird-viewport-rect";
+        }
+
+        rect.setAttribute("fill", "none");
+        rect.setAttribute("stroke", "#ff3b30");
+        rect.style.vectorEffect = "non-scaling-stroke";
+        rect.style.strokeWidth = "3px";
+        rect.style.pointerEvents = "none";
+        rect.setAttribute("x", rect.getAttribute("x") || "0");
+        rect.setAttribute("y", rect.getAttribute("y") || "0");
+        rect.setAttribute("width", rect.getAttribute("width") || "0");
+        rect.setAttribute("height", rect.getAttribute("height") || "0");
+        svg.appendChild(rect);
+        return rect;
+    }
+
+    function configureBirdIframeDocument() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const scrollEl = birdDoc.getElementById("viz-scroll");
+        const svg = birdDoc.getElementById("viz-svg");
+        if (!svg) {
+            return;
+        }
+
+        if (scrollEl) {
+            scrollEl.style.overflow = "hidden";
+            scrollEl.style.width = "100%";
+            scrollEl.style.height = "100%";
+            scrollEl.scrollLeft = 0;
+            scrollEl.scrollTop = 0;
+        }
+        if (birdDoc.documentElement) {
+            birdDoc.documentElement.style.overflow = "hidden";
+        }
+        if (birdDoc.body) {
+            birdDoc.body.style.overflow = "hidden";
+            birdDoc.body.style.margin = "0";
+            birdDoc.body.style.height = "100%";
+        }
+
+        const bounds = computeBirdGraphBounds(svg);
+        if (bounds && bounds.width > 0 && bounds.height > 0) {
+            const pad = 20;
+            svg.setAttribute("viewBox", `${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}`);
+        }
+
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+        ensureBirdViewportRect(birdDoc, svg);
+    }
+
+    function getCssEscapedAttributeValue(value) {
+        const str = String(value);
+        if (window.CSS && typeof window.CSS.escape === "function") {
+            return window.CSS.escape(str);
+        }
+        return str.replace(/["\\]/g, "\\$&");
+    }
+
+    function updateBirdSelectionHighlight() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const nodeEls = birdDoc.querySelectorAll("[data-node-id]");
+        for (let i = 0; i < nodeEls.length; i += 1) {
+            nodeEls[i].classList.remove("selected");
+        }
+
+        if (!state.selectedNodeId) {
+            return;
+        }
+
+        const escapedId = getCssEscapedAttributeValue(state.selectedNodeId);
+        const selectedNodeEl = birdDoc.querySelector(`[data-node-id="${escapedId}"]`);
+        if (selectedNodeEl) {
+            selectedNodeEl.classList.add("selected");
+        }
+    }
+
+    function updateBirdViewportRect(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!sourceContext || !birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const birdSvg = birdDoc.getElementById("viz-svg");
+        if (!birdSvg) {
+            return;
+        }
+        const birdRect = ensureBirdViewportRect(birdDoc, birdSvg);
+        const zoomScale = getMainZoomScale(sourceContext);
+        const panX = getMainPanOffset(sourceContext, "x");
+        const panY = getMainPanOffset(sourceContext, "y");
+        const visibleGraphX = (sourceContext.scrollEl.scrollLeft - panX) / zoomScale;
+        const visibleGraphY = (sourceContext.scrollEl.scrollTop - panY) / zoomScale;
+        const visibleGraphW = sourceContext.scrollEl.clientWidth / zoomScale;
+        const visibleGraphH = sourceContext.scrollEl.clientHeight / zoomScale;
+
+        birdRect.setAttribute("x", String(visibleGraphX));
+        birdRect.setAttribute("y", String(visibleGraphY));
+        birdRect.setAttribute("width", String(visibleGraphW));
+        birdRect.setAttribute("height", String(visibleGraphH));
+    }
+
+    function refreshBirdViewportAndFocus(context) {
+        updateBirdViewportRect(context);
+        updateBirdSelectionHighlight();
+    }
+
+    function scheduleBirdViewportAndFocusUpdate() {
+        if (birdViewSync.viewportUpdatePending) {
+            return;
+        }
+        birdViewSync.viewportUpdatePending = true;
+        birdViewSync.viewportUpdateRafId = requestAnimationFrame(function () {
+            birdViewSync.viewportUpdatePending = false;
+            birdViewSync.viewportUpdateRafId = null;
+            refreshBirdViewportAndFocus();
+        });
+    }
+
+    function bindBirdViewportSync() {
+        const context = getMainVisualizerContext();
+        if (!context || !context.scrollEl) {
+            clearBirdScrollSync();
+            clearBirdViewportUpdateSchedule();
+            return;
+        }
+
+        if (birdViewSync.boundScrollEl !== context.scrollEl || !birdViewSync.boundScrollHandler) {
+            clearBirdScrollSync();
+            const onScroll = function () {
+                scheduleBirdViewportAndFocusUpdate();
+            };
+            context.scrollEl.addEventListener("scroll", onScroll, { passive: true });
+            birdViewSync.boundScrollEl = context.scrollEl;
+            birdViewSync.boundScrollHandler = onScroll;
+        }
+
+        if (birdViewSync.boundMainSvg !== context.mainSvg) {
+            if (birdViewSync.boundMainSvgObserver) {
+                birdViewSync.boundMainSvgObserver.disconnect();
+            }
+            birdViewSync.boundMainSvgObserver = new MutationObserver(function () {
+                scheduleBirdViewportAndFocusUpdate();
+            });
+            birdViewSync.boundMainSvgObserver.observe(context.mainSvg, {
+                attributes: true,
+                attributeFilter: ["style", "data-zoom-scale", "data-pan-x", "data-pan-y", "viewBox", "transform"]
+            });
+            birdViewSync.boundMainSvg = context.mainSvg;
+        }
+
+        refreshBirdViewportAndFocus(context);
+    }
+
+    function bindBirdIframeLifecycle() {
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || birdIframe.dataset.birdLifecycleBound === "true") {
+            return;
+        }
+
+        birdIframe.dataset.birdLifecycleBound = "true";
+        birdIframe.addEventListener("load", function () {
+            configureBirdIframeDocument();
+            updateBirdSelectionHighlight();
+            scheduleBirdViewportAndFocusUpdate();
+        });
+    }
+
+    function renderBirdMinimapFromIframe() {
+        bindBirdIframeLifecycle();
+        syncBirdIframeToMain();
+        configureBirdIframeDocument();
+        bindBirdViewportSync();
+        updateBirdSelectionHighlight();
+        scheduleBirdViewportAndFocusUpdate();
     }
 
     function getNodeById(nodeId) {
@@ -730,6 +1192,16 @@
         });
         pushConsoleOutputLine(result.message);
         renderConsole();
+
+        //Refresh
+        if (result.ok && result.payload && result.payload.graph) {
+            const newGraph = result.payload.graph;
+            if (isValidGraphShape(newGraph)) {
+                state.graph = toGraphState(newGraph); // Update graph in JS
+                renderAll();                          // update tree/bird
+                loadVisualizerOutput();               // new svg
+            }
+        }
     }
 
     function clearConsoleState() {
@@ -1061,6 +1533,9 @@
             iframe.style.height = "100%";
             iframe.style.border = "0";
             iframe.addEventListener("load", function () {
+                bindBirdViewportSync();
+                renderBirdMinimapFromIframe();
+                refreshBirdViewportAndFocus();
                 postSelectedNodeToIframe();
             });
             container.appendChild(iframe);
@@ -1074,7 +1549,11 @@
     function bindIframeSelectionMessages() {
         window.addEventListener("message", function (event) {
             const message = event.data;
-            if (!message || typeof message !== "object" || message.type !== "nodeSelected") {
+            if (!message || typeof message !== "object") {
+                return;
+            }
+
+            if (message.type !== "nodeSelected" && message.type !== "selectNode") {
                 return;
             }
 
@@ -1082,8 +1561,9 @@
                 return;
             }
 
-            const iframe = document.getElementById("main-view-visualizer-iframe");
-            if (!iframe || !iframe.contentWindow || event.source !== iframe.contentWindow) {
+            const mainIframe = document.getElementById("main-view-visualizer-iframe");
+            const fromMain = Boolean(mainIframe && mainIframe.contentWindow && event.source === mainIframe.contentWindow);
+            if (!fromMain) {
                 return;
             }
 
@@ -1126,14 +1606,251 @@
         }
     }
 
-    function bindTreeNodeClicks(treeView) {
-        const nodeButtons = treeView.querySelectorAll("[data-node-id]");
-        nodeButtons.forEach(function (button) {
-            button.addEventListener("click", function () {
-                const nodeId = button.getAttribute("data-node-id");
-                setSelectedNode(nodeId || null);
-            });
+    function getGraphNodeId(node, index) {
+        if (node && node.id !== undefined && node.id !== null) {
+            return String(node.id);
+        }
+        return `__node_${index}`;
+    }
+
+    function getTreeNodeLabel(node, nodeId) {
+        if (!node || typeof node !== "object") {
+            return String(nodeId);
+        }
+
+        const preferredLabel = node.label !== undefined && node.label !== null
+            ? node.label
+            : node.name !== undefined && node.name !== null
+                ? node.name
+                : null;
+
+        if (preferredLabel === null || String(preferredLabel).trim() === "") {
+            return String(nodeId);
+        }
+        return `${nodeId} - ${preferredLabel}`;
+    }
+
+    function formatTreeAttributeValue(value) {
+        if (value === null) {
+            return "null";
+        }
+        if (value === undefined) {
+            return "undefined";
+        }
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+        }
+        try {
+            const serialized = JSON.stringify(value);
+            if (serialized !== undefined) {
+                return serialized;
+            }
+        } catch {
+            // Ignore and fall back to String().
+        }
+        return String(value);
+    }
+
+    function getTreeNodeAttributeEntries(node) {
+        if (!node || typeof node !== "object" || !node.attributes || typeof node.attributes !== "object" || Array.isArray(node.attributes)) {
+            return [];
+        }
+
+        return Object.keys(node.attributes).map(function (key) {
+            return {
+                key: key,
+                value: node.attributes[key]
+            };
         });
+    }
+
+    function normalizeEdgeNodeId(value) {
+        if (value === undefined || value === null) {
+            return null;
+        }
+        if (typeof value === "object") {
+            if (value.id !== undefined && value.id !== null) {
+                return String(value.id);
+            }
+            if (value.node_id !== undefined && value.node_id !== null) {
+                return String(value.node_id);
+            }
+            return null;
+        }
+        return String(value);
+    }
+
+    function getEdgeSourceId(edge) {
+        if (!edge || typeof edge !== "object") {
+            return null;
+        }
+        return normalizeEdgeNodeId(edge.source);
+    }
+
+    function getEdgeTargetId(edge) {
+        if (!edge || typeof edge !== "object") {
+            return null;
+        }
+        return normalizeEdgeNodeId(edge.target);
+    }
+
+    function getOrderedNodeIds(nodes) {
+        const seen = {};
+        const orderedIds = [];
+        nodes.forEach(function (node, index) {
+            const nodeId = getGraphNodeId(node, index);
+            if (seen[nodeId]) {
+                return;
+            }
+            seen[nodeId] = true;
+            orderedIds.push(nodeId);
+        });
+        orderedIds.sort(compareTreeNodeIds);
+        return orderedIds;
+    }
+
+    function isNumericNodeId(nodeId) {
+        return /^-?\d+(\.\d+)?$/.test(String(nodeId));
+    }
+
+    function compareTreeNodeIds(a, b) {
+        const left = String(a);
+        const right = String(b);
+        const leftNumeric = isNumericNodeId(left);
+        const rightNumeric = isNumericNodeId(right);
+
+        if (leftNumeric && rightNumeric) {
+            return Number(left) - Number(right);
+        }
+
+        return left.localeCompare(right, undefined, {
+            numeric: true,
+            sensitivity: "base"
+        });
+    }
+
+    function buildAdjacency(nodes, edges, isDirected) {
+        const nodeIds = getOrderedNodeIds(nodes);
+        const nodeIdSet = new Set(nodeIds);
+        const adjacency = new Map();
+        nodeIds.forEach(function (nodeId) {
+            adjacency.set(nodeId, new Set());
+        });
+
+        edges.forEach(function (edge) {
+            const sourceId = getEdgeSourceId(edge);
+            const targetId = getEdgeTargetId(edge);
+            if (!sourceId || !targetId || !nodeIdSet.has(sourceId) || !nodeIdSet.has(targetId)) {
+                return;
+            }
+
+            adjacency.get(sourceId).add(targetId);
+            if (!isDirected) {
+                adjacency.get(targetId).add(sourceId);
+            }
+        });
+
+        return adjacency;
+    }
+
+    function getTreeGraphSignature(nodes, edges) {
+        const nodeIds = getOrderedNodeIds(nodes);
+        const nodePart = nodeIds.join("|");
+        const edgePart = edges.map(function (edge) {
+            const sourceId = getEdgeSourceId(edge) || "";
+            const targetId = getEdgeTargetId(edge) || "";
+            return `${sourceId}->${targetId}`;
+        }).sort().join("|");
+        return `${nodePart}::${edgePart}`;
+    }
+
+    function syncTreeUIState(nodeIds, signature) {
+        let shouldReset = state.treeUI.lastGraphId !== state.activeGraphId;
+        if (!shouldReset && state.treeUI.lastGraphSignature && state.treeUI.lastGraphSignature !== signature) {
+            shouldReset = true;
+        }
+
+        if (!shouldReset) {
+            const nodeIdSet = new Set(nodeIds);
+            const expandedIds = Object.keys(state.treeUI.expanded);
+            for (let i = 0; i < expandedIds.length; i += 1) {
+                if (!nodeIdSet.has(expandedIds[i])) {
+                    shouldReset = true;
+                    break;
+                }
+            }
+        }
+
+        if (shouldReset) {
+            state.treeUI.expanded = {};
+            state.treeUI.autoExpandedOnce = false;
+        }
+
+        state.treeUI.lastGraphId = state.activeGraphId;
+        state.treeUI.lastGraphSignature = signature;
+    }
+
+    function renderTreeNodeHtml(nodeId, nodeById, adjacency) {
+        const node = nodeById.get(nodeId) || {};
+        const attributeEntries = getTreeNodeAttributeEntries(node);
+        const neighborIds = Array.from(adjacency.get(nodeId) || []).sort(compareTreeNodeIds);
+        const hasAttributes = attributeEntries.length > 0;
+        const hasNeighbors = neighborIds.length > 0;
+        const isExpandable = hasAttributes || hasNeighbors;
+        const isExpanded = isExpandable && Boolean(state.treeUI.expanded[nodeId]);
+        const isSelected = state.selectedNodeId === nodeId;
+        const selectedClass = isSelected ? " is-selected" : "";
+
+        let toggleHtml = '<span class="tree-toggle-placeholder" aria-hidden="true"></span>';
+        if (isExpandable) {
+            toggleHtml = [
+                `<button class="tree-toggle" type="button" aria-expanded="${isExpanded ? "true" : "false"}"`,
+                ` aria-label="${isExpanded ? "Collapse" : "Expand"}">${isExpanded ? "−" : "+"}</button>`
+            ].join("");
+        }
+
+        const label = escapeHtml(getTreeNodeLabel(node, nodeId));
+        let childrenHtml = "";
+        if (isExpandable) {
+            const attrItems = attributeEntries.map(function (attr) {
+                return `<li class="tree-attr">${escapeHtml(attr.key)}: ${escapeHtml(formatTreeAttributeValue(attr.value))}</li>`;
+            }).join("");
+
+            const neighborSection = hasNeighbors ? '<li class="tree-section">Neighbors</li>' : "";
+            const neighborItems = neighborIds.map(function (neighborId) {
+                const neighborLabel = escapeHtml(getTreeNodeLabel(nodeById.get(neighborId), neighborId));
+                return [
+                    '<li class="tree-ref">',
+                    `<button class="tree-ref-btn" type="button" data-node-id="${escapeHtml(neighborId)}">`,
+                    `&rarr; ${neighborLabel}`,
+                    "</button>",
+                    "</li>"
+                ].join("");
+            }).join("");
+
+            const hiddenAttr = isExpanded ? "" : " hidden";
+            childrenHtml = `<ul class="tree-children"${hiddenAttr}>${attrItems}${neighborSection}${neighborItems}</ul>`;
+        }
+
+        return [
+            `<li class="tree-node${selectedClass}" data-node-id="${escapeHtml(nodeId)}">`,
+            '<div class="tree-row">',
+            toggleHtml,
+            `<button class="tree-label" type="button">${label}</button>`,
+            "</div>",
+            childrenHtml,
+            "</li>"
+        ].join("");
+    }
+
+    function getTreeNodeSelector(nodeId) {
+        if (!nodeId) {
+            return null;
+        }
+        if (window.CSS && typeof window.CSS.escape === "function") {
+            return `.tree-node[data-node-id="${window.CSS.escape(String(nodeId))}"]`;
+        }
+        return `.tree-node[data-node-id="${String(nodeId).replace(/"/g, '\\"')}"]`;
     }
 
     function scrollTreeSelectionIntoView(treeView) {
@@ -1141,9 +1858,20 @@
             return;
         }
 
-        const escapedNodeId = CSS.escape(String(state.selectedNodeId));
-        const selectedNodeEl = treeView.querySelector(`[data-node-id="${escapedNodeId}"]`);
+        const selector = getTreeNodeSelector(state.selectedNodeId);
+        if (!selector) {
+            return;
+        }
+
+        const selectedNodeEl = treeView.querySelector(selector);
         if (!selectedNodeEl) {
+            return;
+        }
+
+        const containerRect = treeView.getBoundingClientRect();
+        const nodeRect = selectedNodeEl.getBoundingClientRect();
+        const isVisible = nodeRect.top >= containerRect.top && nodeRect.bottom <= containerRect.bottom;
+        if (isVisible) {
             return;
         }
 
@@ -1162,68 +1890,129 @@
 
         if (!hasLoadedGraph()) {
             treeView.innerHTML = "";
-            return;
-        }
-
-        const nodes = getNodes();
-        if (!nodes.length) {
-            treeView.innerHTML = "";
-            return;
-        }
-
-        const treeItems = nodes.map(function (node) {
-            const rawNodeId = node.id !== undefined && node.id !== null ? String(node.id) : "unknown";
-            const isSelected = rawNodeId === state.selectedNodeId;
-            const selectedClass = isSelected ? " selected" : "";
-            const marker = isSelected ? "●" : "○";
-            const label = node.label ? ` - ${escapeHtml(node.label)}` : "";
-            return [
-                `<li class="tree-item${selectedClass}">`,
-                `<button type="button" class="tree-node-button" data-node-id="${escapeHtml(rawNodeId)}">`,
-                `<span class="tree-marker">${marker}</span><span>${escapeHtml(rawNodeId)}${label}</span>`,
-                "</button>",
-                "</li>"
-            ].join("");
-        }).join("");
-
-        treeView.innerHTML = `<ul class="tree-list">${treeItems}</ul>`;
-        bindTreeNodeClicks(treeView);
-        scrollTreeSelectionIntoView(treeView);
-    }
-
-    function renderBirdView() {
-        const birdView = document.getElementById("bird-view-content");
-        if (!birdView) {
-            return;
-        }
-
-        if (!hasLoadedGraph()) {
-            birdView.innerHTML = "";
+            resetTreeState();
             return;
         }
 
         const nodes = getNodes();
         const edges = getEdges();
-        const selectedNode = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
-
-        let selectedSummary = "";
-        if (selectedNode) {
-            const selectedAttrs = getNodeAttributes(selectedNode, 2)
-                .map(function (attr) {
-                    return `${escapeHtml(attr.key)}=${escapeHtml(attr.value)}`;
-                })
-                .join(", ");
-            selectedSummary = [
-                `<p class="view-meta">Selected node: <strong>${escapeHtml(selectedNode.id)}</strong></p>`,
-                `<p class="view-meta">${selectedAttrs || "No additional attributes"}</p>`
-            ].join("");
+        if (!nodes.length) {
+            treeView.innerHTML = "";
+            return;
         }
 
-        birdView.innerHTML = [
-            `<p class="view-meta">Graph id: ${escapeHtml(state.activeGraphId || "")}</p>`,
-            `<p class="view-meta">Nodes: ${nodes.length} | Edges: ${edges.length}</p>`,
-            selectedSummary
-        ].join("");
+        const nodeById = new Map();
+        const nodeIds = [];
+        nodes.forEach(function (node, index) {
+            const nodeId = getGraphNodeId(node, index);
+            if (!nodeById.has(nodeId)) {
+                nodeById.set(nodeId, node || {});
+                nodeIds.push(nodeId);
+            }
+        });
+        nodeIds.sort(compareTreeNodeIds);
+
+        if (!nodeIds.length) {
+            treeView.innerHTML = "";
+            return;
+        }
+
+        syncTreeUIState(nodeIds, getTreeGraphSignature(nodes, edges));
+        const adjacency = buildAdjacency(nodes, edges, state.isDirected);
+        const rootHtml = nodeIds.map(function (nodeId) {
+            return renderTreeNodeHtml(nodeId, nodeById, adjacency);
+        }).join("");
+
+        treeView.innerHTML = `<ul class="tree-explorer">${rootHtml}</ul>`;
+        scrollTreeSelectionIntoView(treeView);
+    }
+
+    function bindTreeViewInteractions() {
+        const treeView = document.getElementById("tree-view-content");
+        if (!treeView || treeView.dataset.treeBindings === "ready") {
+            return;
+        }
+        treeView.dataset.treeBindings = "ready";
+
+        treeView.addEventListener("click", function (event) {
+            const toggleButton = event.target.closest(".tree-toggle");
+            if (toggleButton && treeView.contains(toggleButton)) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const nodeEl = toggleButton.closest(".tree-node");
+                if (!nodeEl) {
+                    return;
+                }
+
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (!nodeId) {
+                    return;
+                }
+
+                const isAlreadySelected = state.selectedNodeId === nodeId;
+                state.treeUI.expanded[nodeId] = !Boolean(state.treeUI.expanded[nodeId]);
+
+                if (isAlreadySelected) {
+                    renderTreeView();
+                    postSelectedNodeToIframe();
+                    return;
+                }
+
+                setSelectedNode(nodeId);
+                return;
+            }
+
+            const refButton = event.target.closest(".tree-ref-btn");
+            if (refButton && treeView.contains(refButton)) {
+                const refNodeId = refButton.getAttribute("data-node-id");
+                if (!refNodeId) {
+                    return;
+                }
+
+                const refAlreadySelected = state.selectedNodeId === refNodeId;
+                setSelectedNode(refNodeId);
+                if (refAlreadySelected) {
+                    postSelectedNodeToIframe();
+                }
+                return;
+            }
+
+            const labelButton = event.target.closest(".tree-label");
+            if (labelButton && treeView.contains(labelButton)) {
+                const nodeEl = labelButton.closest(".tree-node");
+                if (!nodeEl) {
+                    return;
+                }
+
+                const nodeId = nodeEl.getAttribute("data-node-id");
+                if (!nodeId) {
+                    return;
+                }
+
+                const isAlreadySelected = state.selectedNodeId === nodeId;
+                setSelectedNode(nodeId);
+                if (isAlreadySelected) {
+                    postSelectedNodeToIframe();
+                }
+            }
+        });
+    }
+
+    function renderBirdView() {
+        bindBirdIframeLifecycle();
+        if (!hasLoadedGraph()) {
+            clearBirdScrollSync();
+            clearBirdViewportUpdateSchedule();
+            const birdIframe = document.getElementById("bird-view-iframe");
+            if (birdIframe) {
+                birdIframe.setAttribute("srcdoc", "");
+            }
+            return;
+        }
+
+        renderBirdMinimapFromIframe();
+        refreshBirdViewportAndFocus();
     }
 
     function renderUIState() {
@@ -1283,7 +2072,11 @@
         bindFileInputControls();
         bindVisualizerTabClicks();
         bindGraphFetchControls();
+        bindTreeViewInteractions();
         bindIframeSelectionMessages();
+        window.addEventListener("resize", function () {
+            renderBirdView();
+        });
         renderAll();
     });
 })();

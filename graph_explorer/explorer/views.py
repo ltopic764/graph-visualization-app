@@ -174,6 +174,32 @@ def index(request: HttpRequest) -> HttpResponse:
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
 
+# Parse sent properties
+def _parse_properties(tokens: list[str]) -> dict:
+    props = {}
+    i = 0
+    while i < len(tokens):
+        if tokens[i] == "--property":
+            if i + 1 >= len(tokens):
+                raise ValueError("Missing value after --property (expected key=value)")
+            kv = tokens[i + 1]
+            if "=" not in kv:
+                raise ValueError(f"Invalid property '{kv}' (expected key=value)")
+            k, v = kv.split("=", 1)
+            props[k] = v
+            i += 2
+        else:
+            i += 1
+    return props
+
+def _parse_flag(tokens: list[str], name: str) -> str | None:
+    # Looking for --id=123
+    for i, t in enumerate(tokens):
+        if t.startswith(name + "="):
+            return t.split("=", 1)[1]
+        if t == name and i + 1 < len(tokens):
+            return tokens[i + 1]
+    return None
 
 def _clone_graph(graph: Graph) -> Graph:
     # Create a DEEPCOPY of the original graph
@@ -192,22 +218,6 @@ def _clone_graph(graph: Graph) -> Graph:
     return g2
 
 # Parse sent properties
-# def _parse_properties(tokens: list[str]) -> dict:
-#     props = {}
-#     i = 0
-#     while i < len(tokens):
-#         if tokens[i] == "--property":
-#             if i + 1 >= len(tokens):
-#                 raise ValueError("Missing value after --property (expected key=value)")
-#             kv = tokens[i + 1]
-#             if "=" not in kv:
-#                 raise ValueError(f"Invalid property '{kv}' (expected key=value)")
-#             k, v = kv.split("=", 1)
-#             props[k] = v
-#             i += 2
-#         else:
-#             i += 1
-#     return props
 def _parse_properties(tokens: list[str]) -> dict:
     props = {}
     i = 0
@@ -238,46 +248,70 @@ def _parse_flag(tokens: list[str], name: str) -> str | None:
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
-    if method_error:
-        return method_error
+    if method_error: return method_error
 
     body, error_response = _parse_json_body(request)
-    if error_response:
-        return error_response
+    if error_response: return error_response
 
     graph_id = body.get("graph_id")
     command = (body.get("command") or "").strip()
-    if not graph_id:
-        return _json_error("graph_id is required", status=400)
-    if not command:
-        return _json_error("command is required", status=400)
+
+    if not graph_id or not command:
+        return _json_error("graph_id and command are required", status=400)
 
     workspace = WORKSPACES.get(graph_id)
-    if not workspace or not workspace.has_graph():
-        return _json_error("workspace/graph not found, load a graph first", status=404)
+    if not workspace:
+        return _json_error("Workspace not found", status=404)
 
     try:
         tokens = shlex.split(command)
         if len(tokens) < 2:
-            raise ValueError("Invalid command. Use: create/edit/delete for nodes and edges and search or filter")
+            raise ValueError("Invalid command. format: [action] [subject] --flags")
 
-        subject = tokens[1].lower()
+        action = tokens[0].lower()  # create / edit / delete
+        subject = tokens[1].lower()  # node / edge
+
+        # All flags extraction
+        obj_id = _parse_flag(tokens, "--id")
+        props = _parse_properties(tokens)
 
         if subject == "node":
             msg = _execute_node_command(workspace, tokens)
+        
         elif subject == "edge":
-            # TODO: implement crud for edges
-            raise ValueError("Edge commands are not implemented yet.")
-        else:
-            # Sve sto jos treba prepoznati kako god
-            raise ValueError("...")
+            if action == "create":
+                source = _parse_flag(tokens, "--source")
+                target = _parse_flag(tokens, "--target")
+                if not source or not target:
+                    raise ValueError("Edge creation requires --source and --target")
+                workspace.create_edge(source_id=source, target_id=target, edge_id=obj_id, properties=props)
+                msg = f"OK: Created edge between {source} and {target}"
+            elif action == "edit":
+                if not obj_id: raise ValueError("Missing --id for edge edit")
+                workspace.edit_edge(edge_id=obj_id, properties=props)
+                msg = f"OK: Edited edge {obj_id}"
+            elif action == "delete":
+                if not obj_id: raise ValueError("Missing --id for edge deletion")
+                workspace.delete_edge(edge_id=obj_id)
+                msg = f"OK: Deleted edge {obj_id}"
+            else:
+                raise ValueError(f"Unknown action '{action}' for edge")
 
-        graph_payload = workspace.get_graph().to_dict()
-        ACTIVE_GRAPHS[graph_id] = workspace.get_graph()
-        return JsonResponse({"ok": True, "message": msg, "graph": graph_payload}, status=200)
+        else:
+            raise ValueError(f"Unknown subject '{subject}'. Use 'node' or 'edge'.")
+
+        # Update global map and save graph state
+        updated_graph = workspace.get_graph()
+        ACTIVE_GRAPHS[graph_id] = updated_graph
+
+        return JsonResponse({
+            "ok": True,
+            "message": msg,
+            "graph": updated_graph.to_dict()
+        }, status=200)
 
     except Exception as exc:
-        return JsonResponse({"ok": False, "message": f"ERROR: {exc}"}, status=400)
+        return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
 
 
 def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
@@ -312,7 +346,6 @@ def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
         return f"Ok: deleted node {node_id}"
 
     raise ValueError("Unknown action. Use create/edit/delete")
-
 
 @csrf_exempt
 def graph_search_api(request: HttpRequest) -> JsonResponse:
