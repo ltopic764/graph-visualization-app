@@ -104,6 +104,10 @@ body {
     color: var(--muted);
 }
 
+.filter-error-message {
+    color: #b4232d;
+}
+
 .toolbar-actions {
     display: flex;
     gap: 0.3rem;
