@@ -1,5 +1,4 @@
 import datetime
-from multiprocessing.managers import Value
 from typing import Optional, List, Callable
 from api.graph_api.model import Graph, Node, Edge
 
@@ -175,25 +174,105 @@ class Workspace:
 
         return matched_nodes
 
-    def find_nodes_by_attribute(self, attribute: str, operator: str, value):
-        def coerce(v):
-            if isinstance(v, (int, float, bool)):
-                return v
-            s = str(v)
-            try:
-                return int(s)
-            except ValueError:
-                pass
-            try:
-                return float(s)
-            except ValueError:
-                pass
-            try:
-                return datetime.date.fromisoformat(s)
-            except (ValueError, TypeError):
-                pass
-            return s
+    @staticmethod
+    def _resolve_node_filter_value(node: Node, attribute: str):
+        raw = node.attributes.get(attribute)
 
+        if raw is None:
+            if attribute in ("label", "name"):
+                raw = node.label
+            elif attribute in ("id", "node_id"):
+                raw = node.node_id
+
+        return raw
+
+    @staticmethod
+    def _detect_filter_type(raw):
+        if isinstance(raw, bool):
+            return None
+        if isinstance(raw, int):
+            return int
+        if isinstance(raw, float):
+            return float
+        if isinstance(raw, str):
+            return str
+        if isinstance(raw, datetime.datetime):
+            return datetime.date
+        if isinstance(raw, datetime.date):
+            return datetime.date
+        return None
+
+    @staticmethod
+    def _normalize_raw_for_type(raw, target_type):
+        if target_type is int:
+            if isinstance(raw, bool):
+                return None
+            if isinstance(raw, int):
+                return raw
+            return None
+
+        if target_type is float:
+            if isinstance(raw, bool):
+                return None
+            if isinstance(raw, (int, float)):
+                return float(raw)
+            return None
+
+        if target_type is str:
+            if isinstance(raw, str):
+                return raw
+            return None
+
+        if target_type is datetime.date:
+            if isinstance(raw, datetime.datetime):
+                return raw.date()
+            if isinstance(raw, datetime.date):
+                return raw
+            return None
+
+        return None
+
+    @staticmethod
+    def _convert_filter_value(value, target_type, attribute: str):
+        expected_name = "date (YYYY-MM-DD)" if target_type is datetime.date else target_type.__name__
+        invalid_error = ValueError(
+            f"Invalid filter value '{value}' for attribute '{attribute}'. Expected {expected_name}."
+        )
+
+        try:
+            if target_type is int:
+                if isinstance(value, bool):
+                    raise invalid_error
+                if isinstance(value, int):
+                    return value
+                if isinstance(value, float):
+                    if value.is_integer():
+                        return int(value)
+                    raise invalid_error
+                return int(str(value).strip())
+
+            if target_type is float:
+                if isinstance(value, bool):
+                    raise invalid_error
+                if isinstance(value, (int, float)):
+                    return float(value)
+                return float(str(value).strip())
+
+            if target_type is str:
+                return str(value)
+
+            if target_type is datetime.date:
+                if isinstance(value, datetime.datetime):
+                    return value.date()
+                if isinstance(value, datetime.date):
+                    return value
+                return datetime.date.fromisoformat(str(value).strip())
+        except (TypeError, ValueError):
+            raise invalid_error
+
+        raise ValueError(f"Unsupported attribute type for '{attribute}'")
+
+    def find_nodes_by_attribute(self, attribute: str, operator: str, value):
         ops = {
             "==": lambda a, b: a == b,
             "!=": lambda a, b: a != b,
@@ -207,26 +286,48 @@ class Workspace:
         if op_fn is None:
             raise ValueError(f"Unsupported operator: {operator}")
 
-        coerced_value = coerce(value)
+        target_type = None
+        for node in self.list_nodes():
+            raw = self._resolve_node_filter_value(node, attribute)
+            if raw is None:
+                continue
+
+            target_type = self._detect_filter_type(raw)
+            if target_type is not None:
+                break
+
+        if target_type is None:
+            return []
+
+        allowed_operators_by_type = {
+            str: {"==", "!="},
+            int: {"==", "!=", ">", ">=", "<", "<="},
+            float: {"==", "!=", ">", ">=", "<", "<="},
+            datetime.date: {"==", "!=", ">", ">=", "<", "<="},
+        }
+        allowed_operators = allowed_operators_by_type.get(target_type, set())
+        if operator not in allowed_operators:
+            type_name = "date" if target_type is datetime.date else target_type.__name__
+            allowed_text = ", ".join(sorted(allowed_operators))
+            raise ValueError(
+                f"Operator '{operator}' is not valid for attribute '{attribute}' of type {type_name}. "
+                f"Allowed operators: {allowed_text}."
+            )
+
+        coerced_value = self._convert_filter_value(value, target_type, attribute)
         result = []
 
         for node in self.list_nodes():
-            raw = node.attributes.get(attribute)
-
-            if raw is None:
-                if attribute in ("label", "name"):
-                    raw = node.label
-                elif attribute in ("id", "node_id"):
-                    raw = node.node_id
-
+            raw = self._resolve_node_filter_value(node, attribute)
             if raw is None:
                 continue
 
-            try:
-                if op_fn(coerce(raw), coerced_value):
-                    result.append(node)
-            except TypeError:
+            normalized_raw = self._normalize_raw_for_type(raw, target_type)
+            if normalized_raw is None:
                 continue
+
+            if op_fn(normalized_raw, coerced_value):
+                result.append(node)
 
         return result
 

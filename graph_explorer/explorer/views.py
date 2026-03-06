@@ -3,6 +3,7 @@ import shlex
 import time
 import json
 import logging
+import datetime
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -199,6 +200,61 @@ def _clone_graph(graph: Graph) -> Graph:
                          directed=getattr(e, "directed", True),
                          attributes=deepcopy(getattr(e, "attributes", {}) or {})))
     return g2
+
+
+def _to_json_safe_value(value):
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {
+            str(k): _to_json_safe_value(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_to_json_safe_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_to_json_safe_value(v) for v in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def _build_visualizer_graph(graph: Graph, is_directed: bool) -> Graph:
+    if Graph is None or Node is None or Edge is None:
+        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
+
+    render_graph = Graph(directed=is_directed)
+
+    for node in getattr(graph, "nodes", []):
+        safe_attributes = _to_json_safe_value(getattr(node, "attributes", {}) or {})
+        if not isinstance(safe_attributes, dict):
+            safe_attributes = {}
+        render_graph.add_node(
+            Node(
+                node_id=str(getattr(node, "node_id", "")),
+                label=getattr(node, "label", "") or str(getattr(node, "node_id", "")),
+                attributes=safe_attributes,
+            )
+        )
+
+    for edge in getattr(graph, "edges", []):
+        safe_attributes = _to_json_safe_value(getattr(edge, "attributes", {}) or {})
+        if not isinstance(safe_attributes, dict):
+            safe_attributes = {}
+        render_graph.add_edge(
+            Edge(
+                source=str(getattr(edge, "source", "")),
+                target=str(getattr(edge, "target", "")),
+                edge_id=getattr(edge, "edge_id", None),
+                weight=getattr(edge, "weight", 1.0),
+                directed=is_directed,
+                attributes=safe_attributes,
+            )
+        )
+
+    return render_graph
 
 # Parse sent properties
 def _parse_properties(tokens: list[str]) -> dict:
@@ -403,7 +459,10 @@ def graph_filter_api(request: HttpRequest) -> JsonResponse:
     current_graph = ACTIVE_GRAPHS.get(graph_id)
     current_node_ids = {n.node_id for n in current_graph.nodes} if current_graph else None
 
-    all_matched = workspace.find_nodes_by_attribute(attribute, operator, value)
+    try:
+        all_matched = workspace.find_nodes_by_attribute(attribute, operator, value)
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
 
     if current_node_ids is not None:
         matched_nodes = [n for n in all_matched if n.node_id in current_node_ids]
@@ -667,12 +726,8 @@ def render_visualizer_api(request: HttpRequest) -> HttpResponse:
         )
 
     try:
-        if hasattr(graph, "directed"):
-            graph.directed = is_directed
-        for edge in getattr(graph, "edges", []):
-            if hasattr(edge, "directed"):
-                edge.directed = is_directed
-        html = visualizer.render(graph)
+        graph_for_render = _build_visualizer_graph(graph, is_directed=is_directed)
+        html = visualizer.render(graph_for_render)
     except Exception as exc:
         return _html_response(
             "Visualizer Render Error",

@@ -11,8 +11,10 @@
     const GRAPH_FILTER_ENDPOINT = "/api/graph/filter/";
     const VISUALIZER_RENDER_ENDPOINT = "/api/render/";
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
+    const FILTER_ERROR_AUTO_HIDE_MS = 3500;
     const SVG_NS = "http://www.w3.org/2000/svg";
     let graphFetchSuccessHideTimeoutId = null;
+    let filterErrorHideTimeoutId = null;
     let visualizerRenderRequestSequence = 0;
     const birdViewSync = {
         boundScrollEl: null,
@@ -798,8 +800,40 @@
             appliedQueryTags: document.getElementById("applied-query-tags"),
             appliedQueryCount: document.getElementById("applied-query-count"),
             appliedQueryEmpty: document.getElementById("applied-query-empty"),
-            searchPreview: document.getElementById("search-preview")
+            searchPreview: document.getElementById("search-preview"),
+            filterErrorMessage: document.getElementById("filter-error-message")
         };
+    }
+
+    function clearFilterErrorHideTimeout() {
+        if (filterErrorHideTimeoutId !== null) {
+            clearTimeout(filterErrorHideTimeoutId);
+            filterErrorHideTimeoutId = null;
+        }
+    }
+
+    function hideFilterErrorMessage() {
+        const refs = getToolbarElements();
+        if (!refs.filterErrorMessage) {
+            return;
+        }
+        refs.filterErrorMessage.textContent = "";
+        refs.filterErrorMessage.hidden = true;
+    }
+
+    function showFilterErrorMessage(message) {
+        const refs = getToolbarElements();
+        if (!refs.filterErrorMessage) {
+            return;
+        }
+
+        clearFilterErrorHideTimeout();
+        refs.filterErrorMessage.textContent = String(message || "Invalid filter input.");
+        refs.filterErrorMessage.hidden = false;
+        filterErrorHideTimeoutId = setTimeout(function () {
+            hideFilterErrorMessage();
+            filterErrorHideTimeoutId = null;
+        }, FILTER_ERROR_AUTO_HIDE_MS);
     }
 
     function getFileInputElements() {
@@ -1364,13 +1398,13 @@
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
             renderConsole();
-            return;
+            return false;
         }
 
         if (!attribute || !operator || !value) {
             pushConsoleOutputLine("Please enter attribute, operator and value to filter.");
             renderConsole();
-            return;
+            return false;
         }
 
         const payload = {
@@ -1386,14 +1420,25 @@
         pushConsoleOutputLine(result.message);
         renderConsole();
 
+        if (!result.ok) {
+            showFilterErrorMessage(result.message);
+            return false;
+        }
+
         if (result.ok && result.payload && result.payload.graph) {
             const newGraph = result.payload.graph;
             if (isValidGraphShape(newGraph)) {
                 state.graph = toGraphState(newGraph);
                 renderAll();
                 loadVisualizerOutput();
+                clearFilterErrorHideTimeout();
+                hideFilterErrorMessage();
+                return true;
             }
         }
+
+        showFilterErrorMessage("Filter failed due to an invalid server response.");
+        return false;
     }
 
     async function handleSearchQuery() {
@@ -1435,13 +1480,17 @@
             return;
         }
 
+        const applied = await sendFilterRequest(attribute, operator, value);
+        if (!applied) {
+            return;
+        }
+
         state.queryUI.appliedChips = state.queryUI.appliedChips.concat(createAppliedChip(`${attribute} ${operator} ${value}`, "filter", {
             attribute: attribute,
             operator: operator,
             value: value
         }));
         renderToolbarState();
-        await sendFilterRequest(attribute, operator, value);
     }
 
     async function resetQueryFilterState() {
@@ -1451,6 +1500,8 @@
         state.queryUI.filterValue = "";
         state.queryUI.appliedChips = [];
         state.queryUI.nextChipId = 1;
+        clearFilterErrorHideTimeout();
+        hideFilterErrorMessage();
         renderToolbarState();
 
         if (!state.activeGraphId) {
