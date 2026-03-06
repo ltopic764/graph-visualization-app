@@ -1,16 +1,20 @@
 import json
 from typing import Any
-from api.graph_api.model import Graph, Node, Edge
-from api.graph_api.services.datasource_plugin import DataSourcePlugin
 from api.graph_api.datasource_common.base import BaseDatasourcePlugin
 
 class JsonDatasourcePlugin(BaseDatasourcePlugin):
-    # Adapter to read a JSON file and map it to a Graph object
-    # It extends BaseDatasourcePlugin in which we define TemplateMethod
-    # Both acyclic and cyclic graphs are supported
-    # Acyclic graphs are just the basic JSON structure, while the cyclic is the JSON structure with an '@id' attribute
-    # for mutual referencing
+    """
+    Reads a JSON file from disk and converts it into a Graph object
 
+    Supported formats:
+        Already structured (explicit nodes and edges)
+        Flat list of objects (each object is a node)
+        Nested hierarchy
+        No ids at all
+
+    An Edge is created between two Nodes only if the value already exists as an ID
+    and the attributes name is recognized as something used to describe a connection
+    """
     @property
     def plugin_id(self) -> str:
         # Platform finds this plugin with this id
@@ -37,10 +41,37 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             }
         }
 
+    def _is_reference_field(self, key: str) -> bool:
+        # Determine whether a filed name should be treated as a reference to another node
+        normalized = key.strip().lower()
+
+        explicit_reference_fields = {
+            "parent",
+            "@ref",
+            "ref",
+            "reference",
+            "source",
+            "target",
+            "from",
+            "to",
+            "friend",
+            "best_friend",
+            "also_knows",
+            "manager",
+            "owner",
+            "connects_to",
+            "backup_to",
+        }
+
+        return (
+            normalized in explicit_reference_fields
+            or normalized.endswith("_id")
+            or normalized.endswith("_ref")
+        )
+
+
     def _parse_source(self, source, **kwargs) -> dict:
         # This is the only step that the JSON plugin will be doing differently from the CSV plugin
-        # Everything that is the same for both plugins, will be in the BaseDatasourcePlugin
-
         # The idea is to read a JSON file and return a dictionary that will have keys 'nodes' and 'edges' with data
 
         # Read JSON file
@@ -64,40 +95,45 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
 
     def _convert_flat_list(self, raw_list: list) -> dict:
         # Every object in a list is a node
-        # If a string attribute is the same as an id of a node then this is a cycle
+        # We do two passes through the list one where we collect all ids, and the other where we call the _traverse method
 
         nodes = []
         edges = []
 
         # Collect all ids in the file
         id_registry = set()
+        created_nodes = set()
         counter = [0] # for if an object has not id
+
         for obj in raw_list:
             self._collect_all_ids(obj, id_registry)
 
         # Create nodes and edges
         for obj in  raw_list:
             if isinstance(obj, dict):
-                self._traverse(obj, nodes, edges, id_registry, parent_id=None, counter=counter)
+                self._traverse(obj, nodes, edges, id_registry, created_nodes, parent_id=None, counter=counter)
 
         return {"nodes": nodes, "edges": edges}
 
     def _convert_nested(self, raw_json: dict) -> dict:
+        # Converts a nested JSON into the expected dict
 
         nodes = []
         edges = []
 
         # Firstly we collect all ids
         id_registry = set()
-        self._collect_all_ids(raw_json, id_registry)
-
+        created_nodes = set()
         counter = [0] # for if an object has not id
 
+        self._collect_all_ids(raw_json, id_registry)
+
         # Then we build the Graph object
-        self._traverse(raw_json, nodes, edges, id_registry, parent_id=None, counter=counter)
+        self._traverse(raw_json, nodes, edges, id_registry, created_nodes ,parent_id=None, counter=counter)
 
         return {"nodes": nodes, "edges": edges}
 
+    # helper function
     def _collect_all_ids(self, obj:Any, id_registry: set) -> None:
         if isinstance(obj, dict):
             # Collect all ids
@@ -115,6 +151,7 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             for item in obj:
                 self._collect_all_ids(item, id_registry)
 
+    # Generates a unique id for a node that has no id in the source file
     def _new_auto_id(self, counter: list[int], id_registry: set[str]) -> str:
         # Ensure no collision
         while True:
@@ -125,14 +162,15 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
                 return nid
 
 
-    # Going through the JSON and bulding list of nodes and edges
-    def _traverse(self, obj: Any, nodes: list, edges: list, id_registry: set, parent_id: str, counter: list) -> str:
+    def _traverse(self, obj: Any, nodes: list, edges: list, id_registry: set, created_nodes: set, parent_id: str, counter: list) -> str:
+        # Recursively visits every node in the JSON tree and populates
+        # the nodes and edges lists.
 
         # Primitive values are not nodes
         if not isinstance(obj, dict):
             return None
 
-        # Find id
+        # Resolve node identifier
         if "id" in obj and obj["id"] is not None:
             node_id = str(obj["id"])
         elif "@id" in obj and obj["@id"] is not None:
@@ -152,48 +190,46 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             if key in reserved:
                 continue
 
-            if isinstance(value, (dict, list)):
+            # Nested object becomes a child node
+            if isinstance(value, dict):
                 # Nested object, child of the node
                 children[key] = value
                 continue
 
-            elif isinstance(value, str) and value in id_registry:
-                # String attribute the same as an existing id, cycle
-                edges.append({
-                    "source": node_id,
-                    "target": value
-                })
+            # Lists of objects become child nodes
+            if isinstance(value, list):
+                if all(isinstance(item, dict) for item in value):
+                    children[key] = value
+                else:
+                    # Keep primitive/mixed lists as node aatributes
+                    attributes[key] = value
+                continue
 
-            else:
-                # Regular attribute
-                attributes[key] = value
+            # Only explicitly recognized reference fields create graph edges
+            if (isinstance(value, str) and value in id_registry and self._is_reference_field(key)):
+                edges.append({"source": node_id, "target": value})
+                continue
 
-            # if isinstance(value, str) and value in id_registry and key.lower().endswith(("id", "_id", "ref", "_ref")):
-            #     edges.append({"source": node_id, "target": value, "directed": True})
-            # else:
-            #     # Regular attribute
-            #     attributes[key] = value
+            # Otherwise this is a regular attribute
+            attributes[key] = value
 
-        # Create Node
-        node_data = {"id": node_id, "label": label}
-        node_data.update(attributes)
-        nodes.append(node_data)
+        # Create node only once
+        if node_id not in created_nodes:
+            node_data = {"id": node_id, "label": label}
+            node_data.update(attributes)
+            nodes.append(node_data)
+            created_nodes.add(node_id)
 
-        # Create the Edge to parent
-        if parent_id is not None:
-            edges.append({
-                "source": parent_id,
-                "target": node_id
-            })
+            if parent_id is not None:
+                edges.append({"source": parent_id, "target": node_id})
 
-        for key, value in children.items():
+        # Traverse nested child structures
+        for value in children.values():
             if isinstance(value, list):
                 for child in value:
-                    # Every child in a list has its parent as the current node
-                    self._traverse(child, nodes, edges, id_registry,
-                                   parent_id=node_id, counter=counter)
+                    # Each child in the list has the current node as its parent.
+                    self._traverse(child, nodes, edges, id_registry, created_nodes, parent_id=node_id, counter=counter)
             elif isinstance(value, dict):
-                self._traverse(value, nodes, edges, id_registry,
-                               parent_id=node_id, counter=counter)
+                self._traverse(value, nodes, edges, id_registry, created_nodes, parent_id=node_id, counter=counter)
 
         return node_id
