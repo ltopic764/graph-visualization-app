@@ -3,16 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        /* Base Layout */
         html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
         .graph-container { width: 100%; height: 100%; overflow: hidden; background: #fafafa; }
         #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; cursor: grab; touch-action: none; }
         #viz-svg:active { cursor: grabbing; }
+
+        /* Node Styles - Restored to original */
         .node circle { stroke: #333; stroke-width: 1px; transition: fill 0.3s; }
         .node:hover circle { fill: #ff9800; }
         .node { cursor: move; }
         .node.selected circle { stroke: #ff6a00; stroke-width: 4px; fill: #fff4e8; }
         .node text { pointer-events: none; }
-        .edge-line { stroke: #999; stroke-opacity: 0.6; }
+
+        /* Edge Styles - Hitbox logic for easier hovering */
+        .edge-group { cursor: help; }
+        .edge-hitbox {
+            stroke: transparent;
+            stroke-width: 15px; /* Larger invisible area to catch the mouse */
+            fill: none;
+            pointer-events: stroke;
+        }
+        .edge-line {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            pointer-events: none; /* Let the hitbox handle the mouse events */
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+        .edge-group:hover .edge-line {
+            stroke: #ff9800;
+            stroke-opacity: 1;
+            stroke-width: {{ 4 * scale }};
+        }
+
+        /* Tooltip Styles - Restored to original */
         #viz-tooltip {
             position: fixed;
             display: none;
@@ -33,16 +57,16 @@
             margin-bottom: 4px;
             color: #111;
         }
+        .tooltip-attr { margin-top: 2px; }
+        .tooltip-attr b { color: #555; }
     </style>
 </head>
 <body>
-    {# You can change measurements for width and height of container as you wish, but then you need to
-    adjust them in the plugin accordingly #}
     <div id="viz-scroll" class="graph-container">
         <svg id="viz-svg" width="{{ width }}" height="{{ height }}" data-zoom-scale="1" data-pan-x="0" data-pan-y="0">
             <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7"
-                        refX="{{ radius / scale + 1 }}" refY="3.5" orient="auto">
+                        refX="{{ (radius / scale) + 1 }}" refY="3.5" orient="auto">
                     <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
                 </marker>
             </defs>
@@ -52,15 +76,23 @@
                     {% for edge in edges %}
                         {% set src = positions[edge.source] %}
                         {% set dst = positions[edge.target] %}
-                        <line class="edge-line"
-                              data-source="{{ edge.source }}"
-                              data-target="{{ edge.target }}"
-                              x1="{{ src.x }}" y1="{{ src.y }}"
-                              x2="{{ dst.x }}" y2="{{ dst.y }}"
-                              stroke="#333" stroke-width="{{ 2 * scale }}"
-                              {% if directed %}
-                                marker-end="url(#arrowhead)"
-                              {% endif %} />
+                        <!-- Edge group wraps hitbox and visible line -->
+                        <g class="edge-group"
+                           data-edge-id="{{ edge.edge_id }}"
+                           data-source="{{ edge.source }}"
+                           data-target="{{ edge.target }}"
+                           data-attrs='{{ edge.attributes|default({})|tojson }}'>
+
+                            <line class="edge-hitbox"
+                                  x1="{{ src.x }}" y1="{{ src.y }}"
+                                  x2="{{ dst.x }}" y2="{{ dst.y }}" />
+
+                            <line class="edge-line"
+                                  x1="{{ src.x }}" y1="{{ src.y }}"
+                                  x2="{{ dst.x }}" y2="{{ dst.y }}"
+                                  stroke="#333" stroke-width="{{ 2 * scale }}"
+                                  {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
+                        </g>
                     {% endfor %}
                 </g>
 
@@ -85,306 +117,151 @@
             </g>
         </svg>
     </div>
+
     <div id="viz-tooltip" role="tooltip"></div>
+
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
         (function () {
             "use strict";
-
-            if (!window.d3) {
-                return;
-            }
+            if (!window.d3) return;
 
             const svgEl = document.getElementById("viz-svg");
-            const scrollContainer = document.getElementById("viz-scroll");
             const tooltipEl = document.getElementById("viz-tooltip");
-            if (!svgEl || !scrollContainer || !tooltipEl) {
-                return;
-            }
-
-            const svg = d3.select(svgEl);
             const root = d3.select("#viz-root");
-            const nodeSelection = d3.selectAll("#viz-nodes [data-node-id]");
-            const edgeSelection = d3.selectAll("#viz-edges line[data-source][data-target]");
-            const nodes = nodeSelection.nodes();
+            const nodeSelection = d3.selectAll(".node");
+            const edgeGroups = d3.selectAll(".edge-group");
+
             const nodePositions = new Map();
             const edgesByNode = new Map();
             let selectedNodeId = null;
             let currentTransform = d3.zoomIdentity;
 
-            function escapeHtml(value) {
-                return String(value)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#39;");
+            // --- HELPERS ---
+            function escapeHtml(v) {
+                return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
 
-            function parseTranslate(transformValue) {
-                const match = String(transformValue || "").match(/translate\(\s*([-\d.]+)(?:[\s,]+([-\d.]+))?\s*\)/);
-                if (!match) {
-                    return { x: 0, y: 0 };
-                }
-                const x = parseFloat(match[1] || "0");
-                const y = parseFloat(match[2] || "0");
-                return {
-                    x: Number.isFinite(x) ? x : 0,
-                    y: Number.isFinite(y) ? y : 0
-                };
-            }
-
-            function getEdgeList(nodeId) {
-                if (!edgesByNode.has(nodeId)) {
-                    edgesByNode.set(nodeId, []);
-                }
-                return edgesByNode.get(nodeId);
-            }
-
-            nodes.forEach(function (nodeEl) {
-                const nodeId = nodeEl.getAttribute("data-node-id");
-                if (nodeId) {
-                    const pos = parseTranslate(nodeEl.getAttribute("transform"));
-                    nodePositions.set(nodeId, { x: pos.x, y: pos.y });
-                }
-            });
-
-            edgeSelection.each(function () {
-                const edgeEl = this;
-                const source = edgeEl.getAttribute("data-source");
-                const target = edgeEl.getAttribute("data-target");
-                if (!source || !target) {
-                    return;
-                }
-                getEdgeList(source).push(edgeEl);
-                getEdgeList(target).push(edgeEl);
-            });
-
-            function updateEdge(edgeEl) {
-                const source = edgeEl.getAttribute("data-source");
-                const target = edgeEl.getAttribute("data-target");
-                if (!source || !target) {
-                    return;
-                }
-                const sourcePos = nodePositions.get(source);
-                const targetPos = nodePositions.get(target);
-                if (!sourcePos || !targetPos) {
-                    return;
-                }
-                edgeEl.setAttribute("x1", String(sourcePos.x));
-                edgeEl.setAttribute("y1", String(sourcePos.y));
-                edgeEl.setAttribute("x2", String(targetPos.x));
-                edgeEl.setAttribute("y2", String(targetPos.y));
-            }
-
-            function updateEdgesForNode(nodeId) {
-                const edges = edgesByNode.get(nodeId) || [];
-                for (let i = 0; i < edges.length; i += 1) {
-                    updateEdge(edges[i]);
-                }
-            }
-
-            function setSelectedNode(nodeId) {
-                selectedNodeId = nodeId === null || nodeId === undefined || nodeId === "" ? null : String(nodeId);
-                nodes.forEach(function (nodeEl) {
-                    const nodeElId = nodeEl.getAttribute("data-node-id");
-                    nodeEl.classList.toggle("selected", selectedNodeId !== null && nodeElId === selectedNodeId);
-                });
-            }
-
-            function applyTransform(transform) {
-                currentTransform = transform;
-                root.attr("transform", transform.toString());
-                svg.attr("data-zoom-scale", String(transform.k));
-                svg.attr("data-pan-x", String(transform.x));
-                svg.attr("data-pan-y", String(transform.y));
-                if (window.parent) {
-                    window.parent.postMessage(
-                        { type: "mainTransform", k: transform.k, x: transform.x, y: transform.y },
-                        "*"
-                    );
-                }
-            }
-
-            function focusNode(nodeId) {
-                if (!scrollContainer || !nodeId) {
-                    return;
-                }
-                const pos = nodePositions.get(String(nodeId));
-                if (!pos) {
-                    return;
-                }
-                const scale = currentTransform && Number.isFinite(currentTransform.k) && currentTransform.k > 0
-                    ? currentTransform.k
-                    : 1;
-                const targetX = (scrollContainer.clientWidth / 2) - (pos.x * scale);
-                const targetY = (scrollContainer.clientHeight / 2) - (pos.y * scale);
-                const nextTransform = d3.zoomIdentity.translate(targetX, targetY).scale(scale);
-                svg.transition().duration(220).call(zoom.transform, nextTransform);
-            }
-
-            function readNodeAttrs(nodeEl) {
-                const raw = nodeEl.getAttribute("data-attrs");
-                if (!raw) {
-                    return {};
-                }
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === "object") {
-                        return parsed;
-                    }
-                } catch (error) {
-                    // Invalid payload is ignored and tooltip falls back to node id only.
-                }
-                return {};
-            }
-
-            function renderTooltip(nodeId, attrs) {
-                const keys = Object.keys(attrs || {});
-                const lines = [];
-                for (let i = 0; i < keys.length && lines.length < 8; i += 1) {
-                    const key = keys[i];
-                    lines.push("<div><strong>" + escapeHtml(key) + ":</strong> " + escapeHtml(attrs[key]) + "</div>");
-                }
-
-                tooltipEl.innerHTML =
-                    "<div class=\"tooltip-title\">Node: " + escapeHtml(nodeId) + "</div>" +
-                    (lines.length ? lines.join("") : "<div>No attributes</div>");
+            function readAttrs(el) {
+                try { return JSON.parse(el.getAttribute("data-attrs")) || {}; } catch(e) { return {}; }
             }
 
             function positionTooltip(event) {
-                const offset = 12;
                 tooltipEl.style.display = "block";
-                let left = (event.clientX || 0) + offset;
-                let top = (event.clientY || 0) + offset;
-                const tooltipRect = tooltipEl.getBoundingClientRect();
-                if (left + tooltipRect.width > window.innerWidth - 8) {
-                    left = Math.max(8, window.innerWidth - tooltipRect.width - 8);
-                }
-                if (top + tooltipRect.height > window.innerHeight - 8) {
-                    top = Math.max(8, window.innerHeight - tooltipRect.height - 8);
-                }
-                tooltipEl.style.left = left + "px";
-                tooltipEl.style.top = top + "px";
+                let x = event.clientX + 15, y = event.clientY + 15;
+                const r = tooltipEl.getBoundingClientRect();
+                if (x + r.width > window.innerWidth) x = window.innerWidth - r.width - 10;
+                if (y + r.height > window.innerHeight) y = window.innerHeight - r.height - 10;
+                tooltipEl.style.left = x + "px"; tooltipEl.style.top = y + "px";
             }
 
-            function showTooltip(event, nodeEl) {
-                const nodeId = nodeEl.getAttribute("data-node-id");
-                if (!nodeId) {
-                    return;
-                }
-                renderTooltip(nodeId, readNodeAttrs(nodeEl));
-                positionTooltip(event);
-            }
-
-            function hideTooltip() {
-                tooltipEl.style.display = "none";
-            }
-
-            const zoom = d3.zoom()
-                .scaleExtent([0.2, 4])
-                .filter(function (event) {
-                    if (event.type === "dblclick") {
-                        return false;
-                    }
-                    if (event.type === "wheel") {
-                        const target = event.target;
-                        if (target && typeof target.closest === "function" && target.closest(".attr-scroll-area.scroll-active")) {
-                            return false;
-                        }
-                        return true;
-                    }
-                    if (event.type === "mousedown") {
-                        const target = event.target;
-                        if (target && typeof target.closest === "function") {
-                            return !target.closest("[data-node-id]");
-                        }
-                        return true;
-                    }
-                    return true;
-                })
-                .on("zoom", function (event) {
-                    applyTransform(event.transform);
+            // --- SELECTION LOGIC ---
+            function setSelectedNode(nodeId) {
+                selectedNodeId = (nodeId === null || nodeId === undefined) ? null : String(nodeId);
+                nodeSelection.classed("selected", function() {
+                    return this.getAttribute("data-node-id") === selectedNodeId;
                 });
+            }
+
+            // --- TOOLTIP RENDERING ---
+            function showNodeTooltip(e, el) {
+                const id = el.getAttribute("data-node-id");
+                const attrs = readAttrs(el);
+                let html = `<div class="tooltip-title">Node: ${escapeHtml(id)}</div>`;
+                Object.keys(attrs).forEach(k => {
+                    html += `<div class="tooltip-attr"><b>${escapeHtml(k)}:</b> ${escapeHtml(attrs[k])}</div>`;
+                });
+                tooltipEl.innerHTML = html;
+                positionTooltip(e);
+            }
+
+            function showEdgeTooltip(e, el) {
+                const id = el.getAttribute("data-edge-id") || "unnamed";
+                const src = el.getAttribute("data-source");
+                const tgt = el.getAttribute("data-target");
+                const attrs = readAttrs(el);
+                let html = `<div class="tooltip-title">Edge: ${escapeHtml(id)}</div>`;
+                html += `<div><b>From:</b> ${escapeHtml(src)}</div>`;
+                html += `<div><b>To:</b> ${escapeHtml(tgt)}</div><hr style="border:0;border-top:1px solid #eee;margin:4px 0">`;
+                Object.keys(attrs).forEach(k => {
+                    html += `<div class="tooltip-attr"><b>${escapeHtml(k)}:</b> ${escapeHtml(attrs[k])}</div>`;
+                });
+                tooltipEl.innerHTML = html;
+                positionTooltip(e);
+            }
+
+            // --- DATA INITIALIZATION ---
+            nodeSelection.each(function() {
+                const id = this.getAttribute("data-node-id");
+                const t = d3.select(this).attr("transform").match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+                if (t) nodePositions.set(id, { x: parseFloat(t[1]), y: parseFloat(t[2]) });
+            });
+
+            edgeGroups.each(function() {
+                const s = this.getAttribute("data-source"), t = this.getAttribute("data-target");
+                if (!edgesByNode.has(s)) edgesByNode.set(s, []);
+                if (!edgesByNode.has(t)) edgesByNode.set(t, []);
+                edgesByNode.get(s).push(this);
+                edgesByNode.get(t).push(this);
+            });
+
+            function updateEdges(nodeId) {
+                (edgesByNode.get(nodeId) || []).forEach(group => {
+                    const s = nodePositions.get(group.getAttribute("data-source"));
+                    const t = nodePositions.get(group.getAttribute("data-target"));
+                    d3.select(group).selectAll("line").attr("x1", s.x).attr("y1", s.y).attr("x2", t.x).attr("y2", t.y);
+                });
+            }
+
+            // --- D3 EVENTS ---
+            const zoom = d3.zoom().on("zoom", (e) => {
+                currentTransform = e.transform;
+                root.attr("transform", e.transform);
+            });
 
             const drag = d3.drag()
-                .on("start", function (event) {
-                    hideTooltip();
-                    if (event.sourceEvent) {
-                        event.sourceEvent.stopPropagation();
-                    }
-                })
-                .on("drag", function (event) {
-                    const nodeEl = this;
-                    const nodeId = nodeEl.getAttribute("data-node-id");
-                    if (!nodeId) {
-                        return;
-                    }
-                    const nodePos = nodePositions.get(nodeId);
-                    if (!nodePos) {
-                        return;
-                    }
-                    const scale = currentTransform && Number.isFinite(currentTransform.k) && currentTransform.k > 0
-                        ? currentTransform.k
-                        : 1;
-                    nodePos.x += event.dx / scale;
-                    nodePos.y += event.dy / scale;
-                    d3.select(nodeEl).attr("transform", "translate(" + nodePos.x + ", " + nodePos.y + ")");
-                    updateEdgesForNode(nodeId);
+                .on("start", () => { tooltipEl.style.display = "none"; })
+                .on("drag", function(event) {
+                    const id = this.getAttribute("data-node-id");
+                    const pos = nodePositions.get(id);
+                    pos.x += event.dx / currentTransform.k;
+                    pos.y += event.dy / currentTransform.k;
+                    d3.select(this).attr("transform", `translate(${pos.x},${pos.y})`);
+                    updateEdges(id);
                 });
 
-            svg.call(zoom);
-            svg.on("dblclick.zoom", null);
-            svgEl.addEventListener("wheel", function (event) {
-                const target = event.target;
-                if (target && typeof target.closest === "function" && target.closest(".attr-scroll-area.scroll-active")) {
-                    return;
-                }
-                event.preventDefault();
-            }, { passive: false });
+            d3.select(svgEl).call(zoom);
 
-            nodeSelection
-                .call(drag)
-                .on("mouseenter", function (event) {
-                    showTooltip(event, this);
-                })
-                .on("mousemove", function (event) {
-                    showTooltip(event, this);
-                })
-                .on("mouseleave", function () {
-                    hideTooltip();
-                })
+            // Node Events
+            nodeSelection.call(drag)
+                .on("mouseenter", function(e) { showNodeTooltip(e, this); })
+                .on("mousemove", positionTooltip)
+                .on("mouseleave", () => { tooltipEl.style.display = "none"; })
                 .on("click", function (event) {
-                    if (event.defaultPrevented) {
-                        return;
-                    }
+                    if (event.defaultPrevented) return;
                     const nodeId = this.getAttribute("data-node-id");
                     setSelectedNode(nodeId);
-                    focusNode(nodeId);
+
+                    // Communication with the parent window
                     if (window.parent) {
                         window.parent.postMessage({ type: "nodeSelected", nodeId: nodeId }, "*");
                         window.parent.postMessage({ type: "selectNode", nodeId: nodeId }, "*");
                     }
                 });
 
-            edgeSelection.each(function () {
-                updateEdge(this);
-            });
-            applyTransform(d3.zoomIdentity);
+            // Edge Events
+            edgeGroups
+                .on("mouseenter", function(e) { showEdgeTooltip(e, this); })
+                .on("mousemove", positionTooltip)
+                .on("mouseleave", () => { tooltipEl.style.display = "none"; });
 
+            // Handle incoming messages for external selection
             window.addEventListener("message", function (event) {
-                const message = event.data;
-                if (!message || typeof message !== "object") {
-                    return;
-                }
-                if (message.type === "selectNode") {
-                    setSelectedNode(message.nodeId);
-                    return;
-                }
-                if (message.type === "focusNode") {
-                    focusNode(message.nodeId);
+                if (event.data && event.data.type === "selectNode") {
+                    setSelectedNode(event.data.nodeId);
                 }
             });
+
         })();
     </script>
 </body>
