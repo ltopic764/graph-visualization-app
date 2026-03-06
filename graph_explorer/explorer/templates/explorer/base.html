@@ -9,6 +9,11 @@
 </head>
 <body>
     {% block content %}{% endblock %}
+    <script src="{% static 'js/bird_view.js' %}"></script>
+    <script src="{% static 'js/tree_view.js' %}"></script>
+    <script src="{% static 'js/workspace_ui.js' %}"></script>
+    <script src="{% static 'js/query_ui.js' %}"></script>
+    <script src="{% static 'js/api.js' %}"></script>
     <script src="{% static 'js/app.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
