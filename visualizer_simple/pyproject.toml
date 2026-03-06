@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 
-[project.entry-points."graph.visualizers"]
+[project.entry-points."graph_platform.visualizer"]
 simple = "visualizer_simple_plugin.plugin:SimpleVisualizer"
 
 [tool.setuptools.packages.find]

@@ -16,6 +16,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from core.graph_platform.registry import PluginRegistry
 from core.graph_platform.workspace import Workspace
 #from test_search_filter import workspace
 
@@ -33,39 +34,6 @@ except Exception as exc:  # pragma: no cover - import failure path is runtime/en
 else:
     GRAPH_IMPORT_ERROR = None
 
-try:
-    from visualizer_simple.visualizer_simple_plugin.plugin import SimpleVisualizer
-except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
-    SimpleVisualizer = None  # type: ignore[assignment]
-    SIMPLE_VISUALIZER_IMPORT_ERROR = exc
-else:
-    SIMPLE_VISUALIZER_IMPORT_ERROR = None
-
-try:
-    from visualizer_block.visualizer_block_plugin.plugin import BlockVisualizer
-except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
-    BlockVisualizer = None  # type: ignore[assignment]
-    BLOCK_VISUALIZER_IMPORT_ERROR = exc
-else:
-    BLOCK_VISUALIZER_IMPORT_ERROR = None
-
-try:
-    from datasource_json.datasource_json_plugin.plugin import JsonDatasourcePlugin
-except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
-    JsonDatasourcePlugin = None  # type: ignore[assignment]
-    JSON_DATASOURCE_IMPORT_ERROR = exc
-else:
-    JSON_DATASOURCE_IMPORT_ERROR = None
-
-try:
-    from datasource_csv.datasource_csv_plugin.plugin import CsvDatasourcePlugin
-except Exception as exc:  # pragma: no cover - import failure path is runtime/environment dependent
-    CsvDatasourcePlugin = None  # type: ignore[assignment]
-    CSV_DATASOURCE_IMPORT_ERROR = exc
-else:
-    CSV_DATASOURCE_IMPORT_ERROR = None
-
-
 MOCK_GRAPH_DATA = {
     "nodes": [
         {"id": "n1", "label": "Input", "type": "source"},
@@ -80,6 +48,11 @@ MOCK_GRAPH_DATA = {
 ACTIVE_GRAPHS: dict[str, object] = {}
 ORIGINAL_GRAPHS: dict[str, object] = {}
 LOGGER = logging.getLogger(__name__)
+DATASOURCE_BY_EXTENSION = {
+    ".json": "json",
+    ".csv": "csv",
+}
+SUPPORTED_VISUALIZERS = {"simple", "block"}
 
 
 def _json_error(message: str, status: int) -> JsonResponse:
@@ -128,10 +101,23 @@ def _require_post_json(request: HttpRequest) -> JsonResponse | None:
     return None
 
 
-def _build_datasource_map() -> dict[str, tuple[str, object | None, Exception | None]]:
+def _format_available_plugins(plugin_names: list[str]) -> str:
+    if not plugin_names:
+        return " (no plugins discovered via registry)"
+    return f" (available: {', '.join(sorted(plugin_names))})"
+
+
+def _build_datasource_map() -> dict[str, tuple[str, object | None, str]]:
+    registry = PluginRegistry()
+    discovered = registry.list_datasources()
+    missing_detail = _format_available_plugins(discovered)
     return {
-        ".json": ("json", JsonDatasourcePlugin, JSON_DATASOURCE_IMPORT_ERROR),
-        ".csv": ("csv", CsvDatasourcePlugin, CSV_DATASOURCE_IMPORT_ERROR),
+        extension: (
+            plugin_name,
+            registry.get_datasource(plugin_name),
+            missing_detail,
+        )
+        for extension, plugin_name in DATASOURCE_BY_EXTENSION.items()
     }
 
 
@@ -566,10 +552,9 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
     if extension not in datasource_map:
         return _json_error("Unsupported file extension. Allowed extensions are .json and .csv.", status=400)
 
-    source_name, datasource_cls, import_error = datasource_map[extension]
+    source_name, datasource_cls, missing_detail = datasource_map[extension]
     if datasource_cls is None:
-        detail = f" ({import_error})" if import_error else ""
-        return _json_error(f"The '{source_name}' datasource plugin is not available{detail}", status=501)
+        return _json_error(f"The '{source_name}' datasource plugin is not available{missing_detail}", status=501)
 
     try:
         try:
@@ -673,11 +658,12 @@ def _build_mock_graph(is_directed: bool) -> Graph:
 
 
 def _build_visualizer_map() -> dict[str, object | None]:
-    # TODO: replace direct import mapping with PluginRegistry/entry_points after registry contract is finalized.
-    return {
-        "simple": SimpleVisualizer() if SimpleVisualizer else None,
-        "block": BlockVisualizer() if BlockVisualizer else None,
-    }
+    registry = PluginRegistry()
+    visualizers: dict[str, object | None] = {}
+    for visualizer_name in SUPPORTED_VISUALIZERS:
+        visualizer_cls = registry.get_visualizer(visualizer_name)
+        visualizers[visualizer_name] = visualizer_cls() if visualizer_cls else None
+    return visualizers
 
 
 @require_GET
@@ -690,7 +676,7 @@ def render_visualizer_api(request: HttpRequest) -> HttpResponse:
             status=400,
         )
 
-    if visualizer_id not in {"simple", "block"}:
+    if visualizer_id not in SUPPORTED_VISUALIZERS:
         return _html_response(
             "Invalid visualizer_id",
             f"Unsupported visualizer_id '{visualizer_id}'. Allowed values are simple and block.",
@@ -718,27 +704,13 @@ def render_visualizer_api(request: HttpRequest) -> HttpResponse:
             status=404,
         )
 
-    if visualizer_id == "block" and BlockVisualizer is None:
-        detail = f" ({BLOCK_VISUALIZER_IMPORT_ERROR})" if BLOCK_VISUALIZER_IMPORT_ERROR else ""
-        return _html_response(
-            "Block Visualizer Not Available",
-            f"The block visualizer is not available yet in this environment{detail}",
-        )
-
-    if visualizer_id == "simple" and SimpleVisualizer is None:
-        detail = f" ({SIMPLE_VISUALIZER_IMPORT_ERROR})" if SIMPLE_VISUALIZER_IMPORT_ERROR else ""
-        return _html_response(
-            "Simple Visualizer Failed To Load",
-            f"The simple visualizer could not be loaded{detail}",
-            status=500,
-        )
-
     visualizers = _build_visualizer_map()
     visualizer = visualizers.get(visualizer_id)
     if visualizer is None:
+        available_detail = _format_available_plugins(PluginRegistry().list_visualizers())
         return _html_response(
             "Visualizer Not Available",
-            f"Visualizer '{visualizer_id}' is not currently available.",
+            f"Visualizer '{visualizer_id}' is not currently available{available_detail}.",
             status=500,
         )
 
