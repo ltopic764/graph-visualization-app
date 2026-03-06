@@ -1,45 +1,62 @@
 # This will be used to automatically recognize attributes types
 
-from datetime import date
-from typing import Union
+from datetime import date, datetime
+from typing import Any
 
-# What attributes types can an attribute be
-AttributeValues = Union[int, float, date, str]
+def infer_type(value: Any) -> Any:
+    # Converts raw attribute values to more specific types when possible
 
-def infer_type(value: str) -> AttributeValues:
-    # Convert string value
+    # The goal is to preserve the semantic type of source data so that graph attributes
+    # can be filtered and compared correctly
 
-    # If value is not string return
-    if not isinstance(value, str):
-        # Make sure the type is right
-        if isinstance(value, bool):
-            # Boolean is int in python
-            return str(value)
-        if isinstance(value, (int, float)):
+    if value is None:
+        return None
+
+    # Keep already typed values unchanged
+    if isinstance(value, (bool, int, float, date, datetime)):
+        return value
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "":
             return value
-        return str(value)
 
-    # Now try conversion
-    try:
-        return int(value)
-    except ValueError:
-        pass
+        lowered = stripped.lower()
 
-    try:
-        return float(value)
-    except ValueError:
-        pass
+        # Boolean values
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
 
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        pass
+        # Integer
+        try:
+            return int(stripped)
+        except ValueError:
+            pass
+
+        # Float
+        try:
+            return float(stripped)
+        except ValueError:
+            pass
+
+        # ISO date
+        try:
+            return date.fromisoformat(stripped)
+        except ValueError:
+            pass
+
+        # ISO datetime
+        try:
+            return datetime.fromisoformat(stripped)
+        except ValueError:
+            pass
 
     return value
 
 def infer_attributes(raw_dict: dict) -> dict:
-    # Convert the dictionary of string values to converted values
-
+    # Apply type inference to every attribute value in a dictionary
     return {
         key: infer_type(value)
         for key, value in raw_dict.items()
