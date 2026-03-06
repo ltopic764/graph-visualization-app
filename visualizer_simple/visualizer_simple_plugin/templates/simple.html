@@ -9,25 +9,25 @@
         #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; cursor: grab; touch-action: none; }
         #viz-svg:active { cursor: grabbing; }
 
-        /* Node Styles - Restored to original */
+        /* Node Styles */
         .node circle { stroke: #333; stroke-width: 1px; transition: fill 0.3s; }
         .node:hover circle { fill: #ff9800; }
         .node { cursor: move; }
         .node.selected circle { stroke: #ff6a00; stroke-width: 4px; fill: #fff4e8; }
         .node text { pointer-events: none; }
 
-        /* Edge Styles - Hitbox logic for easier hovering */
+        /* Edge Styles - Keeping the new hitbox functionality */
         .edge-group { cursor: help; }
         .edge-hitbox {
             stroke: transparent;
-            stroke-width: 15px; /* Larger invisible area to catch the mouse */
+            stroke-width: 15px; /* Invisible area to catch the mouse easily */
             fill: none;
             pointer-events: stroke;
         }
         .edge-line {
             stroke: #999;
             stroke-opacity: 0.6;
-            pointer-events: none; /* Let the hitbox handle the mouse events */
+            pointer-events: none;
             transition: stroke 0.2s, stroke-width 0.2s;
         }
         .edge-group:hover .edge-line {
@@ -36,7 +36,7 @@
             stroke-width: {{ 4 * scale }};
         }
 
-        /* Tooltip Styles - Restored to original */
+        /* Tooltip Styles */
         #viz-tooltip {
             position: fixed;
             display: none;
@@ -76,7 +76,6 @@
                     {% for edge in edges %}
                         {% set src = positions[edge.source] %}
                         {% set dst = positions[edge.target] %}
-                        <!-- Edge group wraps hitbox and visible line -->
                         <g class="edge-group"
                            data-edge-id="{{ edge.edge_id }}"
                            data-source="{{ edge.source }}"
@@ -127,7 +126,11 @@
             if (!window.d3) return;
 
             const svgEl = document.getElementById("viz-svg");
+            const scrollContainer = document.getElementById("viz-scroll");
             const tooltipEl = document.getElementById("viz-tooltip");
+            if (!svgEl || !scrollContainer || !tooltipEl) return;
+
+            const svg = d3.select(svgEl);
             const root = d3.select("#viz-root");
             const nodeSelection = d3.selectAll(".node");
             const edgeGroups = d3.selectAll(".edge-group");
@@ -155,9 +158,48 @@
                 tooltipEl.style.left = x + "px"; tooltipEl.style.top = y + "px";
             }
 
-            // --- SELECTION LOGIC ---
+            // --- CORE LOGIC ---
+
+            /**
+             * Critical for Bird View: Updates SVG attributes and notifies parent window
+             */
+            function applyTransform(transform) {
+                currentTransform = transform;
+                root.attr("transform", transform.toString());
+
+                // Bird View relies on these attributes
+                svg.attr("data-zoom-scale", String(transform.k));
+                svg.attr("data-pan-x", String(transform.x));
+                svg.attr("data-pan-y", String(transform.y));
+
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: "mainTransform",
+                        k: transform.k,
+                        x: transform.x,
+                        y: transform.y
+                    }, "*");
+                }
+            }
+
+            /**
+             * Smoothly centers the view on a specific node
+             */
+            function focusNode(nodeId) {
+                if (!scrollContainer || !nodeId) return;
+                const pos = nodePositions.get(String(nodeId));
+                if (!pos) return;
+
+                const scale = currentTransform.k || 1;
+                const targetX = (scrollContainer.clientWidth / 2) - (pos.x * scale);
+                const targetY = (scrollContainer.clientHeight / 2) - (pos.y * scale);
+
+                const nextTransform = d3.zoomIdentity.translate(targetX, targetY).scale(scale);
+                svg.transition().duration(220).call(zoom.transform, nextTransform);
+            }
+
             function setSelectedNode(nodeId) {
-                selectedNodeId = (nodeId === null || nodeId === undefined) ? null : String(nodeId);
+                selectedNodeId = (nodeId === null || nodeId === undefined || nodeId === "") ? null : String(nodeId);
                 nodeSelection.classed("selected", function() {
                     return this.getAttribute("data-node-id") === selectedNodeId;
                 });
@@ -193,12 +235,14 @@
             // --- DATA INITIALIZATION ---
             nodeSelection.each(function() {
                 const id = this.getAttribute("data-node-id");
+                // Extract coordinates from transform attribute
                 const t = d3.select(this).attr("transform").match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
                 if (t) nodePositions.set(id, { x: parseFloat(t[1]), y: parseFloat(t[2]) });
             });
 
             edgeGroups.each(function() {
                 const s = this.getAttribute("data-source"), t = this.getAttribute("data-target");
+                if (!s || !t) return;
                 if (!edgesByNode.has(s)) edgesByNode.set(s, []);
                 if (!edgesByNode.has(t)) edgesByNode.set(t, []);
                 edgesByNode.get(s).push(this);
@@ -209,28 +253,46 @@
                 (edgesByNode.get(nodeId) || []).forEach(group => {
                     const s = nodePositions.get(group.getAttribute("data-source"));
                     const t = nodePositions.get(group.getAttribute("data-target"));
-                    d3.select(group).selectAll("line").attr("x1", s.x).attr("y1", s.y).attr("x2", t.x).attr("y2", t.y);
+                    if (s && t) {
+                        d3.select(group).selectAll("line")
+                            .attr("x1", s.x).attr("y1", s.y)
+                            .attr("x2", t.x).attr("y2", t.y);
+                    }
                 });
             }
 
             // --- D3 EVENTS ---
-            const zoom = d3.zoom().on("zoom", (e) => {
-                currentTransform = e.transform;
-                root.attr("transform", e.transform);
-            });
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 5])
+                .filter(event => {
+                    // Disable zoom/pan when dragging nodes
+                    if (event.type === "mousedown") {
+                        const target = event.target;
+                        if (target && target.closest(".node")) return false;
+                    }
+                    return !event.ctrlKey && event.type !== "dblclick";
+                })
+                .on("zoom", (e) => {
+                    applyTransform(e.transform);
+                });
 
             const drag = d3.drag()
                 .on("start", () => { tooltipEl.style.display = "none"; })
                 .on("drag", function(event) {
                     const id = this.getAttribute("data-node-id");
                     const pos = nodePositions.get(id);
+                    if (!pos) return;
+
+                    // Compensation for current zoom scale
                     pos.x += event.dx / currentTransform.k;
                     pos.y += event.dy / currentTransform.k;
+
                     d3.select(this).attr("transform", `translate(${pos.x},${pos.y})`);
                     updateEdges(id);
                 });
 
-            d3.select(svgEl).call(zoom);
+            svg.call(zoom);
+            svg.on("dblclick.zoom", null);
 
             // Node Events
             nodeSelection.call(drag)
@@ -241,8 +303,8 @@
                     if (event.defaultPrevented) return;
                     const nodeId = this.getAttribute("data-node-id");
                     setSelectedNode(nodeId);
+                    focusNode(nodeId);
 
-                    // Communication with the parent window
                     if (window.parent) {
                         window.parent.postMessage({ type: "nodeSelected", nodeId: nodeId }, "*");
                         window.parent.postMessage({ type: "selectNode", nodeId: nodeId }, "*");
@@ -255,10 +317,18 @@
                 .on("mousemove", positionTooltip)
                 .on("mouseleave", () => { tooltipEl.style.display = "none"; });
 
-            // Handle incoming messages for external selection
+            // Initialize Bird View position
+            applyTransform(d3.zoomIdentity);
+
+            // Global Message Listeners
             window.addEventListener("message", function (event) {
-                if (event.data && event.data.type === "selectNode") {
-                    setSelectedNode(event.data.nodeId);
+                const message = event.data;
+                if (!message) return;
+                if (message.type === "selectNode") {
+                    setSelectedNode(message.nodeId);
+                }
+                if (message.type === "focusNode") {
+                    focusNode(message.nodeId);
                 }
             });
 

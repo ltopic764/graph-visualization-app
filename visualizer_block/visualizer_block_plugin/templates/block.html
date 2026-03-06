@@ -1,194 +1,192 @@
 <!DOCTYPE html>
-
 <html>
 <head>
-<meta charset="UTF-8">
-<style>
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
-#viz-scroll { width: 100%; height: 100%; overflow: hidden; background: #fafafa; }
-#viz-svg { display: block; background: #fafafa; border: 1px solid #eee; cursor: grab; touch-action: none; }
-#viz-svg:active { cursor: grabbing; }
-.block-container {
-border: 1px solid #333;
-background-color: #fff;
-font-family: Arial, sans-serif;
-box-sizing: border-box;
-display: flex;
-flex-direction: column;
-height: 100%;
-box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
-}
-.block-header {
-background-color: #34495e;
-color: white;
-padding: 2px;
-text-align: center;
-font-weight: bold;
-border-bottom: 1px solid #333;
-white-space: nowrap;
-overflow: hidden;
-text-overflow: ellipsis;
-}
-.attr-table {
-width: 100%;
-border-collapse: collapse;
-background: white;
-}
-.attr-table td {
-border-bottom: 1px solid #eee;
-padding: 2px 4px;
-white-space: nowrap;
-}
-.key { font-weight: bold; color: #555; }
-.val { color: #000; text-align: right; }
+    <meta charset="UTF-8">
+    <style>
+        html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+        #viz-scroll { width: 100%; height: 100%; overflow: hidden; background: #fafafa; }
+        #viz-svg { display: block; background: #fafafa; border: 1px solid #eee; cursor: grab; touch-action: none; }
+        #viz-svg:active { cursor: grabbing; }
 
+        /* Node styles */
+        .block-container {
+            border: 1px solid #333;
+            background-color: #fff;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .block-header {
+            background-color: #34495e;
+            color: white;
+            padding: 2px;
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .attr-table td {
+            border-bottom: 1px solid #eee;
+            padding: 2px 4px;
+            white-space: nowrap;
+        }
+        .key { font-weight: bold; color: #555; }
+        .val { color: #000; text-align: right; }
 
-/* Edge interaction styles */
-    .edge-group { cursor: help; }
-    .edge-hitbox {
-        stroke: transparent;
-        stroke-width: 15px;
-        fill: none;
-        pointer-events: stroke;
-    }
-    .edge-line {
-        stroke: #333;
-        stroke-opacity: 0.6;
-        pointer-events: none;
-        transition: stroke 0.2s, stroke-width 0.2s;
-    }
-    .edge-group:hover .edge-line {
-        stroke: #ff9800;
-        stroke-opacity: 1;
-        stroke-width: {{ 3 * scale }};
-    }
+        /* Edge interaction styles - Keep new functionality */
+        .edge-group { cursor: help; }
+        .edge-hitbox {
+            stroke: transparent;
+            stroke-width: 15px;
+            fill: none;
+            pointer-events: stroke;
+        }
+        .edge-line {
+            stroke: #333;
+            stroke-opacity: 0.6;
+            pointer-events: none;
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+        .edge-group:hover .edge-line {
+            stroke: #ff9800;
+            stroke-opacity: 1;
+            /* Scale stroke-width slightly on hover */
+            stroke-width: {{ 2.5 * scale }};
+        }
 
-    .attr-scroll-area {
-        flex: 1;
-        overflow-x: hidden;
-        overflow-y: hidden;
-    }
+        .attr-scroll-area {
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: hidden;
+        }
 
-    .scroll-active {
-        overflow-y: auto;
-    }
+        .scroll-active {
+            overflow-y: auto;
+        }
 
-    .scroll-active::-webkit-scrollbar { width: 4px; }
-    .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
+        .scroll-active::-webkit-scrollbar { width: 4px; }
+        .scroll-active::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
 
-    foreignObject.gv-node { cursor: move; }
-    foreignObject.gv-node.selected .block-container {
-        outline: 3px solid #ff6a00;
-        outline-offset: -3px;
-        box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.15);
-    }
+        foreignObject.gv-node { cursor: move; }
+        foreignObject.gv-node.selected .block-container {
+            outline: 3px solid #ff6a00;
+            outline-offset: -3px;
+            box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.15);
+        }
 
-    #viz-tooltip {
-        position: fixed;
-        display: none;
-        max-width: 320px;
-        z-index: 1000;
-        background: #fff;
-        border: 1px solid #d0d0d0;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        padding: 8px 10px;
-        border-radius: 6px;
-        pointer-events: none;
-        font: 12px/1.35 Arial, sans-serif;
-        color: #222;
-        white-space: pre-line;
-    }
-    #viz-tooltip .tooltip-title {
-        font-weight: 700;
-        margin-bottom: 4px;
-        color: #111;
-    }
-    .tooltip-attr { margin-top: 2px; }
-    .tooltip-attr b { color: #555; }
-</style>
+        /* Tooltip styles */
+        #viz-tooltip {
+            position: fixed;
+            display: none;
+            max-width: 320px;
+            z-index: 1000;
+            background: #fff;
+            border: 1px solid #d0d0d0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            padding: 8px 10px;
+            border-radius: 6px;
+            pointer-events: none;
+            font: 12px/1.35 Arial, sans-serif;
+            color: #222;
+            white-space: pre-line;
+        }
+        #viz-tooltip .tooltip-title {
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #111;
+        }
+        .tooltip-attr { margin-top: 2px; }
+        .tooltip-attr b { color: #555; }
+    </style>
 </head>
 <body>
 <div id="viz-scroll">
-<svg id="viz-svg" width="{{ width }}" height="{{ height }}" data-zoom-scale="1" data-pan-x="0" data-pan-y="0">
-<defs>
-<marker id="arrowhead" markerWidth="10" markerHeight="7"
-refX="{{ (block_w / scale) / 2 + 3 }}" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
-<polygon points="0 0, 10 3.5, 0 7" fill="#333" />
-</marker>
-</defs>
+    <svg id="viz-svg" width="{{ width }}" height="{{ height }}" data-zoom-scale="1" data-pan-x="0" data-pan-y="0">
+        <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                    refX="{{ (block_w / scale) / 2 + 3 }}" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+            </marker>
+        </defs>
 
-code
-Code
-download
-content_copy
-expand_less
-<g id="viz-root">
-        <g id="viz-edges">
-            {% for edge in edges %}
-                {% set src = positions[edge.source] %}
-                {% set dst = positions[edge.target] %}
-                <g class="edge-group"
-                   data-edge-id="{{ edge.edge_id }}"
-                   data-source="{{ edge.source }}"
-                   data-target="{{ edge.target }}"
-                   data-attrs='{{ edge.attributes|default({})|tojson }}'>
+        <g id="viz-root">
+            <g id="viz-edges">
+                {% for edge in edges %}
+                    {% set src = positions[edge.source] %}
+                    {% set dst = positions[edge.target] %}
+                    <g class="edge-group"
+                       data-edge-id="{{ edge.edge_id }}"
+                       data-source="{{ edge.source }}"
+                       data-target="{{ edge.target }}"
+                       data-attrs='{{ edge.attributes|default({})|tojson }}'>
 
-                    <line class="edge-hitbox"
-                          x1="{{ src.x }}" y1="{{ src.y }}"
-                          x2="{{ dst.x }}" y2="{{ dst.y }}" />
+                        <line class="edge-hitbox"
+                              x1="{{ src.x }}" y1="{{ src.y }}"
+                              x2="{{ dst.x }}" y2="{{ dst.y }}" />
 
-                    <line class="edge-line"
-                          x1="{{ src.x }}" y1="{{ src.y }}"
-                          x2="{{ dst.x }}" y2="{{ dst.y }}"
-                          stroke-width="{{ 1.5 * scale }}"
-                          {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
-                </g>
-            {% endfor %}
-        </g>
+                        <line class="edge-line"
+                              x1="{{ src.x }}" y1="{{ src.y }}"
+                              x2="{{ dst.x }}" y2="{{ dst.y }}"
+                              stroke-width="{{ 1.5 * scale }}"
+                              {% if directed %} marker-end="url(#arrowhead)" {% endif %} />
+                    </g>
+                {% endfor %}
+            </g>
 
-        <g id="viz-nodes">
-            {% for node in nodes %}
-                {% set pos = positions[node.node_id] %}
-                <foreignObject x="{{ pos.top_x }}" y="{{ pos.top_y }}"
-                               width="{{ block_w }}" height="{{ block_h }}"
-                               class="gv-node"
-                               id="node-{{ node.node_id }}"
-                               data-node-id="{{ node.node_id }}"
-                               data-attrs='{{ node.attributes|default({})|tojson }}'>
+            <g id="viz-nodes">
+                {% for node in nodes %}
+                    {% set pos = positions[node.node_id] %}
+                    <foreignObject x="{{ pos.top_x }}" y="{{ pos.top_y }}"
+                                   width="{{ block_w }}" height="{{ block_h }}"
+                                   class="gv-node"
+                                   id="node-{{ node.node_id }}"
+                                   data-node-id="{{ node.node_id }}"
+                                   data-attrs='{{ node.attributes|default({})|tojson }}'>
 
-                    <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
-                         style="font-size: {{ font_size }}px;">
+                        <div xmlns="http://www.w3.org/1999/xhtml" class="block-container"
+                             style="font-size: {{ font_size }}px;">
 
-                        <div class="block-header">
-                            {{ node.label if node.label else node.node_id }}
+                            <div class="block-header">
+                                {{ node.label if node.label else node.node_id }}
+                            </div>
+
+                            <div class="attr-scroll-area {{ 'scroll-active' if node.needs_scroll else '' }}">
+                                <table class="attr-table">
+                                    {% if node.attributes %}
+                                        {% for key, value in node.attributes.items() %}
+                                        <tr>
+                                            <td class="key">{{ key }}</td>
+                                            <td class="val">{{ value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
+                                                No attributes
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
                         </div>
-
-                        <div class="attr-scroll-area {{ 'scroll-active' if node.needs_scroll else '' }}">
-                            <table class="attr-table">
-                                {% if node.attributes %}
-                                    {% for key, value in node.attributes.items() %}
-                                    <tr>
-                                        <td class="key">{{ key }}</td>
-                                        <td class="val">{{ value }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="2" style="text-align:center; color: #999; padding-top: 10px;">
-                                            No attributes
-                                        </td>
-                                    </tr>
-                                {% endif %}
-                            </table>
-                        </div>
-                    </div>
-                </foreignObject>
-            {% endfor %}
+                    </foreignObject>
+                {% endfor %}
+            </g>
         </g>
-    </g>
-</svg>
+    </svg>
 </div>
 <div id="viz-tooltip" role="tooltip"></div>
+
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
     (function () {
@@ -211,6 +209,8 @@ expand_less
         let selectedNodeId = null;
         let currentTransform = d3.zoomIdentity;
 
+        // --- Utility Functions ---
+
         function escapeHtml(value) {
             return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         }
@@ -223,6 +223,8 @@ expand_less
         function readAttrs(el) {
             try { return JSON.parse(el.getAttribute("data-attrs")) || {}; } catch(e) { return {}; }
         }
+
+        // --- Initialization ---
 
         nodeSelection.each(function () {
             const nodeId = this.getAttribute("data-node-id");
@@ -245,6 +247,8 @@ expand_less
             edgesByNode.get(source).push(this);
             edgesByNode.get(target).push(this);
         });
+
+        // --- Core Logic ---
 
         function getNodeCenter(nodeId) {
             const pos = nodePositions.get(nodeId);
@@ -269,12 +273,55 @@ expand_less
             edges.forEach(updateEdgeGroup);
         }
 
+        /**
+         * Unified transform application to keep bird view in sync.
+         * Restored from stable version.
+         */
+        function applyTransform(transform) {
+            currentTransform = transform;
+            root.attr("transform", transform.toString());
+
+            // Critical for Bird View: update data attributes
+            svg.attr("data-zoom-scale", String(transform.k));
+            svg.attr("data-pan-x", String(transform.x));
+            svg.attr("data-pan-y", String(transform.y));
+
+            // Notify parent for bird view synchronization
+            if (window.parent) {
+                window.parent.postMessage({
+                    type: "mainTransform",
+                    k: transform.k,
+                    x: transform.x,
+                    y: transform.y
+                }, "*");
+            }
+        }
+
+        /**
+         * Focuses the view on a specific node.
+         * Restored from stable version.
+         */
+        function focusNode(nodeId) {
+            if (!scrollContainer || !nodeId) return;
+            const center = getNodeCenter(String(nodeId));
+            if (!center) return;
+
+            const scale = currentTransform.k || 1;
+            const targetX = (scrollContainer.clientWidth / 2) - (center.x * scale);
+            const targetY = (scrollContainer.clientHeight / 2) - (center.y * scale);
+
+            const nextTransform = d3.zoomIdentity.translate(targetX, targetY).scale(scale);
+            svg.transition().duration(220).call(zoom.transform, nextTransform);
+        }
+
         function setSelectedNode(nodeId) {
             selectedNodeId = (nodeId === null || nodeId === undefined || nodeId === "") ? null : String(nodeId);
             nodeSelection.classed("selected", function() {
                 return this.getAttribute("data-node-id") === selectedNodeId;
             });
         }
+
+        // --- Interaction Handlers ---
 
         function positionTooltip(event) {
             tooltipEl.style.display = "block";
@@ -294,9 +341,14 @@ expand_less
             const id = el.getAttribute("data-node-id");
             const attrs = readAttrs(el);
             let html = `<div class="tooltip-title">Node: ${escapeHtml(id)}</div>`;
-            Object.keys(attrs).forEach(k => {
-                html += `<div class="tooltip-attr"><b>${escapeHtml(k)}:</b> ${escapeHtml(attrs[k])}</div>`;
-            });
+            const keys = Object.keys(attrs);
+            if (keys.length > 0) {
+                keys.forEach(k => {
+                    html += `<div class="tooltip-attr"><b>${escapeHtml(k)}:</b> ${escapeHtml(attrs[k])}</div>`;
+                });
+            } else {
+                html += `<div>No attributes</div>`;
+            }
             tooltipEl.innerHTML = html;
             positionTooltip(e);
         }
@@ -316,13 +368,17 @@ expand_less
             positionTooltip(e);
         }
 
+        // --- D3 Behaviors ---
+
         const zoom = d3.zoom()
             .scaleExtent([0.1, 5])
             .filter(event => {
+                // Prevent zoom when scrolling inside node tables
                 if (event.type === "wheel") {
                     const target = event.target;
                     if (target && target.closest(".attr-scroll-area.scroll-active")) return false;
                 }
+                // Prevent pan when dragging nodes
                 if (event.type === "mousedown") {
                     const target = event.target;
                     if (target && target.closest("[data-node-id]")) return false;
@@ -330,8 +386,7 @@ expand_less
                 return !event.ctrlKey && event.type !== "dblclick";
             })
             .on("zoom", event => {
-                currentTransform = event.transform;
-                root.attr("transform", event.transform);
+                applyTransform(event.transform);
             });
 
         const drag = d3.drag()
@@ -343,11 +398,16 @@ expand_less
                 const nodeId = this.getAttribute("data-node-id");
                 const pos = nodePositions.get(nodeId);
                 if (!pos) return;
+
+                // Adjust for current scale
                 pos.x += event.dx / currentTransform.k;
                 pos.y += event.dy / currentTransform.k;
+
                 d3.select(this).attr("x", pos.x).attr("y", pos.y);
                 updateEdgesForNode(nodeId);
             });
+
+        // --- Setup Listeners ---
 
         svg.call(zoom);
         svg.on("dblclick.zoom", null);
@@ -361,6 +421,7 @@ expand_less
                 if (event.defaultPrevented) return;
                 const nodeId = this.getAttribute("data-node-id");
                 setSelectedNode(nodeId);
+                focusNode(nodeId); // Added back to match stable behavior
                 if (window.parent) {
                     window.parent.postMessage({ type: "nodeSelected", nodeId: nodeId }, "*");
                     window.parent.postMessage({ type: "selectNode", nodeId: nodeId }, "*");
@@ -372,10 +433,16 @@ expand_less
             .on("mousemove", positionTooltip)
             .on("mouseleave", hideTooltip);
 
+        // Initial transform sync
+        applyTransform(d3.zoomIdentity);
+
         window.addEventListener("message", function (event) {
             const message = event.data;
             if (message && message.type === "selectNode") {
                 setSelectedNode(message.nodeId);
+            }
+            if (message && message.type === "focusNode") {
+                focusNode(message.nodeId);
             }
         });
     })();

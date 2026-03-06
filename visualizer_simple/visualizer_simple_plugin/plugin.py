@@ -244,6 +244,7 @@ class SimpleVisualizer(VisualizerPlugin):
         while queue:
             curr, d = queue.pop(0)
             levels[curr] = d
+
             for e in edges:
                 if e.source == curr and e.target not in visited:
                     visited.add(e.target)
