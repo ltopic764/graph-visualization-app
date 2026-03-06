@@ -4,6 +4,8 @@
     // TODO: add D3-based rendering for the active visualizer in Main View.
     // TODO: improve focus synchronization behavior across Main/Tree/Bird interactions.
     // TODO: replace mock data state with platform/API integration payloads.
+    const DEFAULT_VISUALIZER = "simple";
+    const DEFAULT_DIRECTED = true;
     const DEFAULT_FILTER_OPERATOR = "==";
     const GRAPH_LOAD_ENDPOINT = "/api/graph/load/";
     const CLI_EXECUTE_ENDPOINT = "/api/cli/execute/";
@@ -26,13 +28,19 @@
     };
 
     const state = {
-        activeVisualizer: "simple",
+        activeVisualizer: DEFAULT_VISUALIZER,
         activeGraphId: null,
-        isDirected: true,
+        isDirected: DEFAULT_DIRECTED,
         selectedNodeId: null,
         selectedUploadFile: null,
         selectedUploadFilename: "",
         graph: null,
+        graphOriginal: null,
+        workspaces: {
+            byId: {},
+            orderedIds: [],
+            nextUntitledLabelIndex: 1
+        },
         graphFetchStatus: "idle",
         graphFetchErrorMessage: null,
         graphFetchLastLoadedAt: null,
@@ -45,14 +53,7 @@
             renderedVisualizerId: null,
             renderedIsDirected: null
         },
-        queryUI: {
-            searchText: "",
-            filterAttribute: "",
-            filterOperator: DEFAULT_FILTER_OPERATOR,
-            filterValue: "",
-            appliedChips: [],
-            nextChipId: 1
-        },
+        queryUI: createDefaultQueryUI(),
         consoleUI: {
             currentInput: "",
             history: [],
@@ -81,6 +82,180 @@
             nodes: graph.nodes,
             edges: graph.edges
         };
+    }
+
+    function createDefaultQueryUI() {
+        return {
+            searchText: "",
+            filterAttribute: "",
+            filterOperator: DEFAULT_FILTER_OPERATOR,
+            filterValue: "",
+            appliedChips: [],
+            nextChipId: 1
+        };
+    }
+
+    function normalizeVisualizer(value) {
+        return value === "block" ? "block" : DEFAULT_VISUALIZER;
+    }
+
+    function normalizeDirected(value) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+        return DEFAULT_DIRECTED;
+    }
+
+    function cloneQueryUI(queryUI) {
+        const source = queryUI && typeof queryUI === "object" ? queryUI : createDefaultQueryUI();
+        const sourceChips = Array.isArray(source.appliedChips) ? source.appliedChips : [];
+        return {
+            searchText: String(source.searchText || ""),
+            filterAttribute: String(source.filterAttribute || ""),
+            filterOperator: String(source.filterOperator || DEFAULT_FILTER_OPERATOR),
+            filterValue: String(source.filterValue || ""),
+            appliedChips: sourceChips.map(function (chip, index) {
+                const chipPayload = chip && typeof chip.payload === "object" && chip.payload !== null
+                    ? Object.assign({}, chip.payload)
+                    : chip ? chip.payload : null;
+                return {
+                    id: chip && chip.id !== undefined && chip.id !== null ? chip.id : index + 1,
+                    label: chip && chip.label !== undefined ? String(chip.label) : "",
+                    type: chip && chip.type !== undefined ? String(chip.type) : "",
+                    payload: chipPayload
+                };
+            }),
+            nextChipId: Number.isFinite(source.nextChipId) && source.nextChipId > 0
+                ? Number(source.nextChipId)
+                : sourceChips.length + 1
+        };
+    }
+
+    function getWorkspaceById(graphId) {
+        if (!graphId) {
+            return null;
+        }
+        return state.workspaces.byId[graphId] || null;
+    }
+
+    function getActiveWorkspace() {
+        return getWorkspaceById(state.activeGraphId);
+    }
+
+    function getWorkspaceLabel(filename) {
+        const cleanFilename = typeof filename === "string" ? filename.trim() : "";
+        if (cleanFilename) {
+            return cleanFilename;
+        }
+        const label = `Workspace ${state.workspaces.nextUntitledLabelIndex}`;
+        state.workspaces.nextUntitledLabelIndex += 1;
+        return label;
+    }
+
+    function upsertWorkspace(workspace) {
+        if (!workspace || !workspace.graphId) {
+            return;
+        }
+        state.workspaces.byId[workspace.graphId] = workspace;
+        if (state.workspaces.orderedIds.indexOf(workspace.graphId) === -1) {
+            state.workspaces.orderedIds.push(workspace.graphId);
+        }
+    }
+
+    function syncActiveWorkspaceFromState() {
+        const workspace = getActiveWorkspace();
+        if (!workspace) {
+            return;
+        }
+        workspace.graph = toGraphState(state.graph);
+        workspace.graphOriginal = toGraphState(state.graphOriginal) || workspace.graphOriginal || null;
+        workspace.selectedNodeId = state.selectedNodeId ? String(state.selectedNodeId) : null;
+        workspace.queryUI = cloneQueryUI(state.queryUI);
+        workspace.activeVisualizer = normalizeVisualizer(state.activeVisualizer);
+        workspace.isDirected = normalizeDirected(state.isDirected);
+    }
+
+    function hydrateStateFromWorkspace(workspace) {
+        if (!workspace) {
+            return;
+        }
+        state.activeGraphId = workspace.graphId;
+        state.graph = toGraphState(workspace.graph);
+        state.graphOriginal = toGraphState(workspace.graphOriginal) || toGraphState(workspace.graph);
+        state.selectedNodeId = workspace.selectedNodeId ? String(workspace.selectedNodeId) : null;
+        state.queryUI = cloneQueryUI(workspace.queryUI);
+        state.activeVisualizer = normalizeVisualizer(workspace.activeVisualizer);
+        state.isDirected = normalizeDirected(workspace.isDirected);
+    }
+
+    function clearActiveWorkspaceState() {
+        state.activeGraphId = null;
+        state.graph = null;
+        state.graphOriginal = null;
+        state.selectedNodeId = null;
+        state.queryUI = createDefaultQueryUI();
+        state.activeVisualizer = DEFAULT_VISUALIZER;
+        state.isDirected = DEFAULT_DIRECTED;
+        state.graphFetchStatus = "idle";
+        state.graphFetchErrorMessage = null;
+        state.graphFetchLastLoadedAt = null;
+        state.graphFetchMeta = null;
+        clearFilterErrorHideTimeout();
+        hideFilterErrorMessage();
+        resetTreeState();
+        resetVisualizerRenderState("idle", null);
+    }
+
+    function setActiveWorkspace(graphId) {
+        const nextWorkspace = getWorkspaceById(graphId);
+        if (!nextWorkspace) {
+            return;
+        }
+
+        const isSameWorkspace = state.activeGraphId === graphId;
+        if (!isSameWorkspace) {
+            syncActiveWorkspaceFromState();
+            hydrateStateFromWorkspace(nextWorkspace);
+            resetTreeState();
+        }
+
+        clearFilterErrorHideTimeout();
+        hideFilterErrorMessage();
+        resetVisualizerRenderState("idle", null);
+        renderAll();
+        if (hasLoadedGraph()) {
+            loadVisualizerOutput();
+        }
+    }
+
+    function removeWorkspace(graphId) {
+        if (!graphId || state.workspaces.orderedIds.indexOf(graphId) === -1) {
+            return;
+        }
+
+        syncActiveWorkspaceFromState();
+
+        const workspaceIndex = state.workspaces.orderedIds.indexOf(graphId);
+        const fallbackGraphId =
+            state.workspaces.orderedIds[workspaceIndex + 1] ||
+            state.workspaces.orderedIds[workspaceIndex - 1] ||
+            null;
+
+        delete state.workspaces.byId[graphId];
+        state.workspaces.orderedIds.splice(workspaceIndex, 1);
+
+        if (state.activeGraphId !== graphId) {
+            renderAll();
+            return;
+        }
+
+        if (fallbackGraphId && getWorkspaceById(fallbackGraphId)) {
+            setActiveWorkspace(fallbackGraphId);
+            return;
+        }
+
+        clearActiveWorkspaceState();
+        renderAll();
     }
 
     function getGraphFetchErrorMessage(error) {
@@ -117,21 +292,12 @@
         state.treeUI.autoExpandedOnce = false;
     }
 
-    function clearLoadedGraphState() {
-        state.activeGraphId = null;
-        state.graph = null;
-        state.selectedNodeId = null;
-        resetVisualizerRenderState("idle", null);
-        resetTreeState();
-    }
-
     async function loadGraphData(file) {
         if (file && file.name) {
             state.selectedUploadFilename = file.name;
         }
 
         if (!file) {
-            clearLoadedGraphState();
             state.graphFetchStatus = "error";
             state.graphFetchErrorMessage = "Please choose a JSON or CSV file before loading.";
             state.graphFetchLastLoadedAt = null;
@@ -141,7 +307,7 @@
         }
 
         clearGraphFetchSuccessHideTimeout();
-        clearLoadedGraphState();
+        syncActiveWorkspaceFromState();
         state.graphFetchStatus = "loading";
         state.graphFetchErrorMessage = null;
         state.graphFetchMeta = null;
@@ -173,19 +339,41 @@
                 throw new Error("Invalid graph response shape; expected { ok, graph_id, graph: {nodes, edges} }.");
             }
 
-            state.activeGraphId = typeof payload.graph_id === "string" ? payload.graph_id : null;
-            if (!state.activeGraphId) {
+            const graphId = typeof payload.graph_id === "string" ? payload.graph_id : null;
+            if (!graphId) {
                 throw new Error("Missing graph_id in load response.");
             }
-            state.graph = toGraphState(payload.graph);
-            state.graphOriginal = toGraphState(payload.graph);
+            const graphState = toGraphState(payload.graph);
+            if (!graphState) {
+                throw new Error("Invalid graph payload.");
+            }
+
+            const metadata = payload.meta && typeof payload.meta === "object" ? payload.meta : {};
+            const filenameFromMeta = typeof metadata.filename === "string" ? metadata.filename.trim() : "";
+            const filename = filenameFromMeta || (file && file.name ? String(file.name).trim() : "");
+            const existingWorkspace = getWorkspaceById(graphId);
+            const workspace = {
+                graphId: graphId,
+                label: existingWorkspace && existingWorkspace.label ? existingWorkspace.label : getWorkspaceLabel(filename),
+                filename: filename || null,
+                graph: graphState,
+                graphOriginal: graphState,
+                selectedNodeId: null,
+                queryUI: createDefaultQueryUI(),
+                activeVisualizer: existingWorkspace
+                    ? normalizeVisualizer(existingWorkspace.activeVisualizer)
+                    : normalizeVisualizer(state.activeVisualizer),
+                isDirected: existingWorkspace
+                    ? normalizeDirected(existingWorkspace.isDirected)
+                    : normalizeDirected(state.isDirected)
+            };
+            upsertWorkspace(workspace);
+
             state.graphFetchStatus = "success";
             state.graphFetchErrorMessage = null;
             state.graphFetchLastLoadedAt = Date.now();
             state.graphFetchMeta = payload.meta || null;
-            resetVisualizerRenderState("idle", null);
-            renderAll();
-            loadVisualizerOutput();
+            setActiveWorkspace(graphId);
 
             graphFetchSuccessHideTimeoutId = setTimeout(function () {
                 if (state.graphFetchStatus === "success") {
@@ -197,7 +385,6 @@
         } catch (error) {
             console.warn(`Graph Explorer: unable to load ${GRAPH_LOAD_ENDPOINT}.`, error);
 
-            clearLoadedGraphState();
             state.graphFetchStatus = "error";
             state.graphFetchErrorMessage = `Failed to load graph (${getGraphFetchErrorMessage(error)})`;
             state.graphFetchLastLoadedAt = null;
@@ -845,6 +1032,13 @@
         };
     }
 
+    function getWorkspaceSelectorElements() {
+        return {
+            list: document.getElementById("workspace-selector-list"),
+            empty: document.getElementById("workspace-selector-empty")
+        };
+    }
+
     function getConsoleElements() {
         return {
             commandInput: document.getElementById("console-command-input"),
@@ -991,6 +1185,97 @@
         if (refs.loadButton) {
             refs.loadButton.disabled = state.graphFetchStatus === "loading" || !state.selectedUploadFile;
         }
+    }
+
+    function renderWorkspaceSelector() {
+        const refs = getWorkspaceSelectorElements();
+        if (!refs.list) {
+            return;
+        }
+
+        refs.list.innerHTML = "";
+        const workspaceIds = state.workspaces.orderedIds;
+        if (!workspaceIds.length) {
+            if (refs.empty) {
+                refs.empty.hidden = false;
+            }
+            return;
+        }
+
+        if (refs.empty) {
+            refs.empty.hidden = true;
+        }
+
+        workspaceIds.forEach(function (graphId, index) {
+            const workspace = getWorkspaceById(graphId);
+            if (!workspace) {
+                return;
+            }
+
+            const item = document.createElement("div");
+            item.className = "workspace-item";
+            const isActiveWorkspace = graphId === state.activeGraphId;
+            if (isActiveWorkspace) {
+                item.classList.add("is-active");
+            }
+
+            const selectButton = document.createElement("button");
+            selectButton.type = "button";
+            selectButton.className = "workspace-button placeholder-button secondary-button";
+            selectButton.setAttribute("data-graph-id", graphId);
+            selectButton.textContent = workspace.label || `Workspace ${index + 1}`;
+            selectButton.title = workspace.filename || graphId;
+            selectButton.setAttribute("aria-pressed", String(isActiveWorkspace));
+            if (isActiveWorkspace) {
+                selectButton.classList.add("active");
+            }
+
+            const closeButton = document.createElement("button");
+            closeButton.type = "button";
+            closeButton.className = "workspace-close-button placeholder-button secondary-button";
+            closeButton.setAttribute("data-close-graph-id", graphId);
+            closeButton.setAttribute("aria-label", `Close ${workspace.label || `Workspace ${index + 1}`}`);
+            closeButton.title = `Close ${workspace.label || `Workspace ${index + 1}`}`;
+            closeButton.textContent = "x";
+
+            item.appendChild(selectButton);
+            item.appendChild(closeButton);
+            refs.list.appendChild(item);
+        });
+    }
+
+    function bindWorkspaceSelectorControls() {
+        const refs = getWorkspaceSelectorElements();
+        if (!refs.list || refs.list.dataset.workspaceBindings === "ready") {
+            return;
+        }
+
+        refs.list.dataset.workspaceBindings = "ready";
+        refs.list.addEventListener("click", function (event) {
+            const closeTarget = event.target.closest(".workspace-close-button[data-close-graph-id]");
+            if (closeTarget && refs.list.contains(closeTarget)) {
+                const closeGraphId = closeTarget.getAttribute("data-close-graph-id");
+                if (!closeGraphId) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                removeWorkspace(closeGraphId);
+                return;
+            }
+
+            const target = event.target.closest(".workspace-button[data-graph-id]");
+            if (!target || !refs.list.contains(target)) {
+                return;
+            }
+
+            const graphId = target.getAttribute("data-graph-id");
+            if (!graphId) {
+                return;
+            }
+
+            setActiveWorkspace(graphId);
+        });
     }
 
     function bindFileInputControls() {
@@ -1357,6 +1642,7 @@
         }
 
         renderAppliedChips();
+        syncActiveWorkspaceFromState();
     }
 
     async function sendSearchRequest(queryText) {
@@ -1552,14 +1838,17 @@
 
         refs.filterAttributeInput.addEventListener("input", function (event) {
             state.queryUI.filterAttribute = event.target.value;
+            syncActiveWorkspaceFromState();
         });
 
         refs.filterOperatorSelect.addEventListener("change", function (event) {
             state.queryUI.filterOperator = event.target.value;
+            syncActiveWorkspaceFromState();
         });
 
         refs.filterValueInput.addEventListener("input", function (event) {
             state.queryUI.filterValue = event.target.value;
+            syncActiveWorkspaceFromState();
         });
 
         if (refs.searchQueryButton) {
@@ -2117,8 +2406,10 @@
 
     function renderAll() {
         syncSelectedNode();
+        syncActiveWorkspaceFromState();
         renderUIState();
         renderFileInputState();
+        renderWorkspaceSelector();
         renderGraphFetchStatus();
         renderToolbarState();
         renderConsoleDockState();
@@ -2133,6 +2424,7 @@
         bindConsoleControls();
         bindConsoleDockControls();
         bindFileInputControls();
+        bindWorkspaceSelectorControls();
         bindVisualizerTabClicks();
         bindGraphFetchControls();
         bindTreeViewInteractions();

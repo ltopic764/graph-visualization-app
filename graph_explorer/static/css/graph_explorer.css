@@ -150,6 +150,53 @@ body {
     row-gap: 0.12rem;
 }
 
+.workspace-selector-area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-height: 1.8rem;
+}
+
+.workspace-selector-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.workspace-item {
+    display: inline-flex;
+    align-items: stretch;
+}
+
+.workspace-button {
+    padding: 0.24rem 0.5rem;
+    font-size: 0.74rem;
+    line-height: 1.2;
+    border-radius: 6px 0 0 6px;
+    border-right-width: 0;
+}
+
+.workspace-close-button {
+    padding: 0.24rem 0.38rem;
+    font-size: 0.74rem;
+    line-height: 1.2;
+    border-radius: 0 6px 6px 0;
+    min-width: 1.7rem;
+}
+
+.workspace-item.is-active .workspace-button,
+.workspace-item.is-active .workspace-close-button,
+.workspace-button.active {
+    border-color: var(--accent);
+    background: #eaf2fd;
+    color: #0e3d74;
+    font-weight: 700;
+}
+
+.workspace-close-button:hover {
+    background: #eef4fd;
+}
+
 .filter-row {
     display: grid;
     grid-template-columns: minmax(130px, 2fr) minmax(70px, 0.85fr) minmax(130px, 2fr) auto;
