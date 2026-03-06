@@ -1365,11 +1365,11 @@
         if (!state.activeGraphId) {
             pushConsoleOutputLine("Load a graph first.");
             renderConsole();
-            return;
+            return false;
         }
 
         if (!query) {
-            return;
+            return false;
         }
 
         const result = await postJsonRequest(GRAPH_SEARCH_ENDPOINT, {
@@ -1386,8 +1386,11 @@
                 state.graph = toGraphState(newGraph);
                 renderAll();
                 loadVisualizerOutput();
+                return true;
             }
         }
+
+        return false;
     }
 
     async function sendFilterRequest(attributeText, operatorText, valueText) {
@@ -1458,7 +1461,13 @@
             createAppliedChip(`search: ${searchText}`, "search", { searchText: searchText })
         );
         renderToolbarState();
-        await sendSearchRequest(searchText);
+        const applied = await sendSearchRequest(searchText);
+        if (!applied) {
+            return;
+        }
+
+        state.queryUI.searchText = "";
+        renderToolbarState();
     }
 
     async function handleFilterQuery() {
@@ -1490,6 +1499,9 @@
             operator: operator,
             value: value
         }));
+        state.queryUI.filterAttribute = "";
+        state.queryUI.filterOperator = DEFAULT_FILTER_OPERATOR;
+        state.queryUI.filterValue = "";
         renderToolbarState();
     }
 
