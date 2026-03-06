@@ -13,8 +13,7 @@ dependencies = [
     "jinja2"
 ]
 
-# Group "graph.visualizers"
-[project.entry-points."graph.visualizers"]
+[project.entry-points."graph_platform.visualizer"]
 block = "visualizer_block_plugin.plugin:BlockVisualizer"
 
 [tool.setuptools.packages.find]

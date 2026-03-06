@@ -3,6 +3,9 @@
 # -r api/requirements.txt
 
 -e ./api
+-e ./core
+-e ./datasource_json
+-e ./datasource_csv
 -e ./visualizer_simple
 -e ./visualizer_block
 jinja2

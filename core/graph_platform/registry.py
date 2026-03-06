@@ -5,6 +5,9 @@ from typing import Dict, Type
 
 
 class PluginRegistry:
+    DATASOURCE_ENTRYPOINT_GROUP = "graph_platform.datasource"
+    VISUALIZER_ENTRYPOINT_GROUP = "graph_platform.visualizer"
+    LEGACY_VISUALIZER_ENTRYPOINT_GROUP = "graph.visualizers"
 
     _instance = None
     _datasources: Dict[str, Type[DataSourcePlugin]]
@@ -21,11 +24,15 @@ class PluginRegistry:
     def _load_plugins(self):
         eps = entry_points()
 
-        for ep in eps.select(group="graph_platform.datasource"):
+        for ep in eps.select(group=self.DATASOURCE_ENTRYPOINT_GROUP):
             self._datasources[ep.name] = ep.load()
 
-        for ep in eps.select(group="graph_platform.visualizer"):
+        for ep in eps.select(group=self.VISUALIZER_ENTRYPOINT_GROUP):
             self._visualizers[ep.name] = ep.load()
+
+        # Keep compatibility with previously published visualizer entry-point group.
+        for ep in eps.select(group=self.LEGACY_VISUALIZER_ENTRYPOINT_GROUP):
+            self._visualizers.setdefault(ep.name, ep.load())
 
     def get_datasource(self, name: str) -> Type[DataSourcePlugin] | None:
         return self._datasources.get(name)
