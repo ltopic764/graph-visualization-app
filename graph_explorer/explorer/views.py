@@ -4,6 +4,7 @@ import time
 import json
 import logging
 import datetime
+import re
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -294,13 +295,132 @@ def _parse_properties(tokens: list[str]) -> dict:
             i += 1
     return props
 
+def _graph_to_payload(graph: Graph) -> dict:
+    return {
+        "nodes": [n.to_dict() for n in graph.nodes],
+        "edges": [e.to_dict() for e in graph.edges],
+    }
+
+
+def _reset_graph_state(graph_id: str) -> Graph:
+    original_graph = ORIGINAL_GRAPHS.get(graph_id)
+    if not original_graph:
+        raise ValueError("Graph not found")
+
+    fresh_graph = _clone_graph(original_graph)
+    ACTIVE_GRAPHS[graph_id] = fresh_graph
+
+    workspace = WORKSPACES.get(graph_id)
+    if workspace is None:
+        workspace = Workspace()
+        WORKSPACES[graph_id] = workspace
+
+    workspace.clear()
+    workspace.set_graph(fresh_graph)
+    return fresh_graph
+
+def _clear_graph_state(graph_id: str) -> Graph:
+    workspace = WORKSPACES.get(graph_id)
+
+    if workspace is None:
+        workspace = Workspace()
+        WORKSPACES[graph_id] = workspace
+
+    current_graph = (
+        ACTIVE_GRAPHS.get(graph_id)
+        or workspace.get_graph()
+        or ORIGINAL_GRAPHS.get(graph_id)
+    )
+
+    directed = getattr(current_graph, "directed", True) if current_graph else True
+    empty_graph = Graph(directed=directed)
+
+    ACTIVE_GRAPHS[graph_id] = empty_graph
+    ORIGINAL_GRAPHS[graph_id] = _clone_graph(empty_graph)
+
+    workspace.clear()
+    workspace.set_graph(empty_graph)
+
+    return empty_graph
+
+
+def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) -> Graph:
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        raise ValueError("Graph not found")
+
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
+
+    query = query.strip()
+
+    # Ako je query oblika Name=Tom, tretiraj kao precizan atributski search
+    if "=" in query and "==" not in query and "!=" not in query and ">=" not in query and "<=" not in query:
+        attribute, value = query.split("=", 1)
+        matched_nodes = workspace.find_nodes_by_attribute(attribute.strip(), "==", value.strip())
+    else:
+        matched_nodes = workspace.find_nodes_by_query_contains(query)
+
+    matched_ids = {str(n.node_id) for n in matched_nodes}
+    filtered_graph = _build_subgraph(current_graph, matched_ids)
+
+    ACTIVE_GRAPHS[graph_id] = filtered_graph
+    workspace.set_graph(filtered_graph)
+    return filtered_graph
+
+
+def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
+    condition = condition.strip()
+
+    match = re.match(r"^(.+?)(==|!=|>=|<=|>|<|=)(.+)$", condition)
+    if not match:
+        raise ValueError(f"Invalid filter condition: '{condition}'")
+
+    attribute = match.group(1).strip()
+    operator = match.group(2).strip()
+    value = match.group(3).strip()
+
+    if operator == "=":
+        operator = "=="
+
+    return attribute, operator, value
+
+
+def _apply_filter_expression_to_workspace(graph_id: str, workspace: Workspace, expression: str) -> Graph:
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        raise ValueError("Graph not found")
+
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
+
+    expression = expression.strip()
+    conditions = [c.strip() for c in expression.split("&&") if c.strip()]
+    if not conditions:
+        raise ValueError("Empty filter expression")
+
+    temp_graph = current_graph
+
+    for condition in conditions:
+        attribute, operator, value = _parse_filter_condition(condition)
+        workspace.set_graph(temp_graph)
+        matched_nodes = workspace.find_nodes_by_attribute(attribute, operator, value)
+        matched_ids = {str(n.node_id) for n in matched_nodes}
+        temp_graph = _build_subgraph(temp_graph, matched_ids)
+
+    ACTIVE_GRAPHS[graph_id] = temp_graph
+    workspace.set_graph(temp_graph)
+    return temp_graph
+
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
-    if method_error: return method_error
+    if method_error:
+        return method_error
 
     body, error_response = _parse_json_body(request)
-    if error_response: return error_response
+    if error_response:
+        return error_response
 
     graph_id = body.get("graph_id")
     command = (body.get("command") or "").strip()
@@ -314,19 +434,66 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
     try:
         tokens = shlex.split(command)
+        if not tokens:
+            raise ValueError("Empty command")
+
+        action = tokens[0].lower()
+
+        # SEARCH
+        if action == "search":
+            if len(tokens) < 2:
+                raise ValueError("Invalid search command. Use: search 'Name=Tom'")
+
+            query = " ".join(tokens[1:]).strip()
+            updated_graph = _apply_search_to_workspace(graph_id, workspace, query)
+
+            return JsonResponse({
+                "ok": True,
+                "message": f"OK: Search applied ({query})",
+                "graph": _graph_to_payload(updated_graph)
+            }, status=200)
+
+        # FILTER
+        if action == "filter":
+            if len(tokens) < 2:
+                raise ValueError("Invalid filter command. Use: filter 'Age>30 && Height>=150'")
+
+            expression = " ".join(tokens[1:]).strip()
+            updated_graph = _apply_filter_expression_to_workspace(graph_id, workspace, expression)
+
+            return JsonResponse({
+                "ok": True,
+                "message": f"OK: Filter applied ({expression})",
+                "graph": _graph_to_payload(updated_graph)
+            }, status=200)
+
+        # CLEAR / CLEAR GRAPH
+        
+        if action == "clear":
+            if len(tokens) == 1 or (len(tokens) == 2 and tokens[1].lower() == "graph"):
+                cleared_graph = _clear_graph_state(graph_id)
+
+                return JsonResponse({
+                    "ok": True,
+                    "message": "OK: Graph canvas cleared",
+                    "graph": cleared_graph.to_dict()
+                }, status=200)
+
+            raise ValueError("Invalid clear command. Use: clear or clear graph")
+
+        # Existing NODE / EDGE commands
+        # create/edit/delete node/edge ...
+
         if len(tokens) < 2:
             raise ValueError("Invalid command. format: [action] [subject] --flags")
 
-        action = tokens[0].lower()  # create / edit / delete
-        subject = tokens[1].lower()  # node / edge
-
-        # All flags extraction
+        subject = tokens[1].lower()
         obj_id = _parse_flag(tokens, "--id")
         props = _parse_properties(tokens)
 
         if subject == "node":
             msg = _execute_node_command(workspace, tokens)
-        
+
         elif subject == "edge":
             if action == "create":
                 source = _parse_flag(tokens, "--source")
@@ -336,20 +503,24 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
                 workspace.create_edge(source_id=source, target_id=target, edge_id=obj_id, properties=props)
                 msg = f"OK: Created edge between {source} and {target}"
             elif action == "edit":
-                if not obj_id: raise ValueError("Missing --id for edge edit")
+                if not obj_id:
+                    raise ValueError("Missing --id for edge edit")
                 workspace.edit_edge(edge_id=obj_id, properties=props)
                 msg = f"OK: Edited edge {obj_id}"
             elif action == "delete":
-                if not obj_id: raise ValueError("Missing --id for edge deletion")
+                if not obj_id:
+                    raise ValueError("Missing --id for edge deletion")
                 workspace.delete_edge(edge_id=obj_id)
                 msg = f"OK: Deleted edge {obj_id}"
             else:
                 raise ValueError(f"Unknown action '{action}' for edge")
 
         else:
-            raise ValueError(f"Unknown subject '{subject}'. Use 'node' or 'edge'.")
+            raise ValueError(
+                f"Unknown command '{action}' or subject '{subject}'. "
+                f"Supported: create/edit/delete node|edge, search, filter, clear"
+            )
 
-        # Update global map and save graph state
         updated_graph = workspace.get_graph()
         ACTIVE_GRAPHS[graph_id] = updated_graph
 
@@ -361,6 +532,16 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
+    
+def _build_empty_graph_like(graph: Graph | None = None) -> Graph:
+    if Graph is None:
+        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
+
+    is_directed = True
+    if graph is not None:
+        is_directed = getattr(graph, "directed", True)
+
+    return Graph(directed=is_directed)
 
 
 def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
