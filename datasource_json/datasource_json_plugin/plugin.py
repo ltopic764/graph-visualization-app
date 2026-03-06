@@ -61,6 +61,7 @@ class JsonDatasourcePlugin(BaseDatasourcePlugin):
             "owner",
             "connects_to",
             "backup_to",
+            "also_links",
         }
 
         return (
