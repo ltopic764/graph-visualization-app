@@ -317,35 +317,13 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
         if len(tokens) < 2:
             raise ValueError("Invalid command. format: [action] [subject] --flags")
 
-        action = tokens[0].lower()  # create / edit / delete
-        subject = tokens[1].lower()  # node / edge
+        subject = tokens[1].lower()
 
-        # All flags extraction
-        obj_id = _parse_flag(tokens, "--id")
-        props = _parse_properties(tokens)
-
+        # Command delegation by subject
         if subject == "node":
             msg = _execute_node_command(workspace, tokens)
-        
         elif subject == "edge":
-            if action == "create":
-                source = _parse_flag(tokens, "--source")
-                target = _parse_flag(tokens, "--target")
-                if not source or not target:
-                    raise ValueError("Edge creation requires --source and --target")
-                workspace.create_edge(source_id=source, target_id=target, edge_id=obj_id, properties=props)
-                msg = f"OK: Created edge between {source} and {target}"
-            elif action == "edit":
-                if not obj_id: raise ValueError("Missing --id for edge edit")
-                workspace.edit_edge(edge_id=obj_id, properties=props)
-                msg = f"OK: Edited edge {obj_id}"
-            elif action == "delete":
-                if not obj_id: raise ValueError("Missing --id for edge deletion")
-                workspace.delete_edge(edge_id=obj_id)
-                msg = f"OK: Deleted edge {obj_id}"
-            else:
-                raise ValueError(f"Unknown action '{action}' for edge")
-
+            msg = _execute_edge_command(workspace, tokens)
         else:
             raise ValueError(f"Unknown subject '{subject}'. Use 'node' or 'edge'.")
 
@@ -395,6 +373,64 @@ def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
         return f"Ok: deleted node {node_id}"
 
     raise ValueError("Unknown action. Use create/edit/delete")
+
+
+def _execute_edge_command(workspace: Workspace, tokens: list[str]) -> str:
+    """Execute command for edge objects: [action] edge --id --source --target --props"""
+    if len(tokens) < 2:
+        raise ValueError("Invalid command format. Use: [action] edge --flags")
+
+    action = tokens[0].lower()
+    subject = tokens[1].lower()
+
+    if subject != "edge":
+        raise ValueError("Only edge commands are supported here")
+
+    # Flag extraction
+    edge_id = _parse_flag(tokens, "--id")
+    props = _parse_properties(tokens)
+
+
+    graph = workspace.get_graph()
+
+    if action == "create":
+        if not edge_id:
+            raise ValueError("Edge creation requires --id")
+
+        # Check if id already exists
+        if any(e.get('id') == edge_id for e in graph.to_dict().get('edges', [])):
+            raise ValueError(f"Edge with id '{edge_id}' already exists.")
+
+        source = _parse_flag(tokens, "--source")
+        target = _parse_flag(tokens, "--target")
+
+        if not source or not target:
+            raise ValueError("Edge creation requires --source and --target")
+
+        workspace.create_edge(source_id=source, target_id=target, edge_id=edge_id, properties=props)
+        return f"OK: Created edge {edge_id} between {source} and {target}"
+
+    if action == "edit":
+        if not edge_id:
+            raise ValueError("Missing --id for edge edit")
+
+        if not any(e.get('id') == edge_id for e in graph.to_dict().get('edges', [])):
+            raise ValueError(f"Edge with id '{edge_id}' does not exist.")
+
+        workspace.edit_edge(edge_id=edge_id, properties=props)
+        return f"OK: Edited edge {edge_id}"
+
+    if action == "delete":
+        if not edge_id:
+            raise ValueError("Missing --id for edge deletion")
+
+        if not any(e.get('id') == edge_id for e in graph.to_dict().get('edges', [])):
+            raise ValueError(f"Edge with id '{edge_id}' does not exist.")
+
+        workspace.delete_edge(edge_id=edge_id)
+        return f"OK: Deleted edge {edge_id}"
+
+    raise ValueError(f"Unknown action '{action}' for edge. Use create/edit/delete.")
 
 @csrf_exempt
 def graph_search_api(request: HttpRequest) -> JsonResponse:
