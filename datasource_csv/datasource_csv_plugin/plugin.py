@@ -1,13 +1,20 @@
 import csv
 import os.path
-from dataclasses import field
-from api.graph_api.model import Graph
-from typing import Any, List, Dict, Set
+from typing import Any, List, Dict
 from api.graph_api.datasource_common.base import BaseDatasourcePlugin
 
+
 class CsvDatasourcePlugin(BaseDatasourcePlugin):
-    # Adapter to read the CSV file and create Graph object
-    # Acyclic and cyclic graphs are supported
+    """
+        Reads a CSV file from disk and converts it into a Graph object
+
+        Supported formats:
+            Edge list (each row describes one edge)
+            Node list (each row describes one node)
+
+        An Edge is created between two Nodes only if the value already exists as an ID
+        and the attributes name is recognized as something used to describe a connection
+        """
 
     @property
     def plugin_id(self) -> str:
@@ -18,6 +25,7 @@ class CsvDatasourcePlugin(BaseDatasourcePlugin):
         return "CSV File"
 
     def parameters_schema(self) -> dict:
+        # Tells the platform which parameters to ask the user for
         return {
             "file_path": {
                 "type": "str",
@@ -37,90 +45,102 @@ class CsvDatasourcePlugin(BaseDatasourcePlugin):
             }
         }
 
-    def _parse_source(self, source, **kwargs) -> dict:
-        # Here we are using the TemplateMethod
-        # This is the only step that the CSV plugin will be doing differently from the JSON plugin
-        # Everything that is the same for both plugins, will be in the BaseDatasourcePlugin
+    def _is_reference_field(self, key: str) -> bool:
+        # Determine whether a filed name should be treated as a reference to another node
+        normalized = key.strip().lower()
 
-        # Reads CSV and returns standard dict with 'nodes' and 'edges' keys
+        explicit_reference_fields = {
+            "parent", "ref", "reference",
+            "source", "target", "from", "to",
+            "friend", "best_friend", "also_knows",
+            "manager", "owner", "connects_to", "backup_to",
+            "next_city", "next", "linked_to",
+        }
+
+        return (
+            normalized in explicit_reference_fields
+            or normalized.endswith("_id")
+            or normalized.endswith("_ref")
+        )
+
+    def _parse_source(self, source: Any, **kwargs) -> dict:
+        # Reads the CSV file and returns the expected dict
 
         delimiter = kwargs.get("delimiter")
 
-        if not os.path.exists(source):
-            raise FileNotFoundError(f"CSV file not found: {source}")
-
         path = self._resolve_path(source, kwargs)
+
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"CSV file not found: {path}")
+
         with open(path, 'r', encoding='utf-8') as f:
-            # Detect delimiter if not provided
             if not delimiter:
                 try:
-                    # Take a small portion of the text and sniff out the delimiter
+                    # Read a sample and detect delimiter automatically
+                    # Supports comma, semicolon, tab, pipe, etc.
                     sample = f.read(2048)
                     f.seek(0)
                     delimiter = csv.Sniffer().sniff(sample).delimiter
                 except csv.Error:
-                    delimiter = ',' #fallback
-            else:
-                f.seek(0)
+                    delimiter = ','  # fallback to comma
 
-            # Read CSV into list of dicts
             reader = csv.DictReader(f, delimiter=delimiter, skipinitialspace=True)
             rows = list(reader)
 
         if not rows:
             return {"nodes": [], "edges": []}
 
-        fieldnames = set(rows[0].keys()) if rows[0].keys() else set()
+        # Detect format based on column names
+        normalized = {name.lower() for name in rows[0].keys() if isinstance(name, str)}
 
-        # Normalize all column names to lowercase
-        normalized = {name.lower() for name in fieldnames if isinstance(name, str)}
-
-        # If header contains specific words treat is as a certain file
         if "source" in normalized and "target" in normalized:
+            # Each row describes an edge
             return self._parse_edge_list(rows)
         else:
+            # Each row describes a node
             return self._parse_node_list(rows)
 
-
     def _parse_edge_list(self, rows: List[Dict]) -> dict:
-        # Parsing a CSV where every row is an edge
-        nodes = {} # using dictionary is we have duplicates
+        # Parses a CSV where each row describes one graph edge
+
+        nodes = {}  # dict to avoid duplicate nodes
         edges = []
 
-        for i, row in enumerate(rows):
-            src = row.get("source") or row.get("Source") or row.get("SOURCE")
-            dst = row.get("target") or row.get("Target") or row.get("TARGET")
+        for row in rows:
+            # Normalize keys to lowercase to handle Source/SOURCE/source etc.
+            row_lower = {k.lower(): v for k, v in row.items() if k is not None}
 
-            src = str(src).strip()
-            dst = str(dst).strip()
+            src = str(row_lower.get("source", "")).strip()
+            dst = str(row_lower.get("target", "")).strip()
 
             if not src or not dst:
                 continue
 
-            # Add nodes if they have not been seen
+            # Register nodes implicitly edge list has no node attributes
             if src not in nodes:
                 nodes[src] = {"id": src, "label": src}
             if dst not in nodes:
                 nodes[dst] = {"id": dst, "label": dst}
 
-            directed_raw = row.get("directed") or row.get("Directed") or row.get("DIRECTED")
-            directed = True if directed_raw in (None, "", "True", "true", "1") else False
+            # directed defaults to True if column missing or empty
+            directed_raw = row_lower.get("directed", "")
+            directed = directed_raw not in ("False", "false", "0")
 
-            weight = row.get("weight") or row.get("Weight") or row.get("WEIGHT")
+            weight = row_lower.get("weight")
 
-            # Edge attributes are all other columns
-            reserved = {"source", "Source", "SOURCE", "target", "Target", "TARGET", "id", "ID", "weight", "Weight",
-                        "WEIGHT", "directed", "Directed", "DIRECTED"}
+            edge_id = row_lower.get("id")
 
-            # Create Edge
-            attributes = {k: v for k, v in row.items() if k not in reserved and k is not None}
-
-            edge_id = row.get("id")
+            # All other columns are edge attributes
+            reserved = {"source", "target", "id", "weight", "directed"}
+            attributes = {
+                k: v for k, v in row_lower.items()
+                if k not in reserved and v is not None
+            }
 
             edge_dict = {
-                "id": str(edge_id).strip() if edge_id not in (None, "") else None,
-                "source": src,
-                "target": dst,
+                "id":       str(edge_id).strip() if edge_id not in (None, "") else None,
+                "source":   src,
+                "target":   dst,
                 "directed": directed,
             }
 
@@ -128,67 +148,62 @@ class CsvDatasourcePlugin(BaseDatasourcePlugin):
                 edge_dict["weight"] = weight
 
             edge_dict.update(attributes)
-
             edges.append(edge_dict)
 
         return {"nodes": list(nodes.values()), "edges": edges}
 
     def _parse_node_list(self, rows: List[Dict]) -> dict:
-        # Parsing a CSV file where every row is a node
+        # Parses a CSV where each row describes one graph node
+        # Two passes here, one for collecting all ids and the other for building nodes and detecting edges
 
         nodes = []
         edges = []
         id_registry = set()
 
-        # Collect all ids
+        # First pass collect all node IDs
         for i, row in enumerate(rows):
             node_id = self._get_row_id(row, i)
             id_registry.add(node_id)
 
-        # Create Nodes and Edges
+        # Second pass build nodes and edges
         for i, row in enumerate(rows):
             node_id = self._get_row_id(row, i)
-
             label = row.get("label") or row.get("name") or row.get("title") or node_id
 
             attributes = {}
             reserved = {"id", "ID", "@id", "label", "name", "title"}
 
             for key, value in row.items():
-                if key is None:
+                if key is None or key in reserved:
                     continue
-
-                if key in reserved:
-                    continue
-
                 if value is None:
                     continue
 
                 val_str = str(value).strip()
 
-                # If a value is an existing id, it is an Edge
-                if val_str in id_registry and val_str != node_id:
+                if not val_str:
+                    continue
+
+                # Becomes an edge only if value is a known ID AND
+                # column name explicitly suggests a reference
+                if (val_str in id_registry
+                        and val_str != node_id
+                        and self._is_reference_field(key)):
                     edges.append({
-                        "source": node_id,
-                        "target": val_str
+                        "source":   node_id,
+                        "target":   val_str,
+                        "directed": True,
                     })
                 else:
                     attributes[key] = value
 
-            node_dict: Dict[str, Any] = {
-                "id": node_id,
-                "label": label,
-            }
-
+            node_dict: Dict[str, Any] = {"id": node_id, "label": label}
             node_dict.update(attributes)
-
             nodes.append(node_dict)
 
         return {"nodes": nodes, "edges": edges}
 
     def _get_row_id(self, row: dict, index: int) -> str:
-        # Get id from row, or generate it
-
         if "id" in row and row["id"] not in (None, ""):
             return str(row["id"]).strip()
         if "ID" in row and row["ID"] not in (None, ""):
@@ -196,5 +211,5 @@ class CsvDatasourcePlugin(BaseDatasourcePlugin):
         if "@id" in row and row["@id"] not in (None, ""):
             return str(row["@id"]).strip()
 
-        # Generate based on row
+        # No ID column  generate based on row position
         return f"row_{index + 1}"
