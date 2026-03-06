@@ -17,6 +17,10 @@
         activeGraphId: null,
         isDirected: DEFAULT_DIRECTED,
         selectedNodeId: null,
+        datasourcePlugins: [],
+        datasourcePluginsStatus: "loading",
+        datasourcePluginsErrorMessage: null,
+        selectedDatasourcePlugin: "",
         selectedUploadFile: null,
         selectedUploadFilename: "",
         graph: null,
@@ -62,6 +66,9 @@
         }
         if (typeof window.GraphExplorerApi.postJsonRequest !== "function") {
             throw new Error("GraphExplorerApi.postJsonRequest is not available.");
+        }
+        if (typeof window.GraphExplorerApi.loadDatasourcePlugins !== "function") {
+            throw new Error("GraphExplorerApi.loadDatasourcePlugins is not available.");
         }
         if (typeof window.GraphExplorerApi.loadGraphFile !== "function") {
             throw new Error("GraphExplorerApi.loadGraphFile is not available.");
@@ -402,6 +409,35 @@
         treeViewController.resetState();
     }
 
+    // Load datasource plugin options from backend registry discovery.
+    async function loadDatasourcePlugins() {
+        state.datasourcePluginsStatus = "loading";
+        state.datasourcePluginsErrorMessage = null;
+        renderAll();
+
+        try {
+            const datasourcePlugins = await apiClient.loadDatasourcePlugins();
+            state.datasourcePlugins = Array.isArray(datasourcePlugins) ? datasourcePlugins : [];
+            const hasSelectedDatasource = state.datasourcePlugins.some(function (plugin) {
+                return plugin && plugin.id === state.selectedDatasourcePlugin;
+            });
+            if (!hasSelectedDatasource) {
+                state.selectedDatasourcePlugin = "";
+            }
+            state.datasourcePluginsStatus = "success";
+            state.datasourcePluginsErrorMessage = null;
+        } catch (error) {
+            console.warn(`Graph Explorer: unable to load ${apiEndpoints.datasourcePlugins}.`, error);
+            state.datasourcePlugins = [];
+            state.selectedDatasourcePlugin = "";
+            state.datasourcePluginsStatus = "error";
+            state.datasourcePluginsErrorMessage =
+                `Failed to load datasource plugins (${getDatasourcePluginFetchErrorMessage(error)})`;
+        }
+
+        renderAll();
+    }
+
     // Upload a graph file, create/update workspace state, and activate it.
     async function loadGraphData(file) {
         if (file && file.name) {
@@ -417,6 +453,18 @@
             return;
         }
 
+        const selectedDatasourcePlugin = state.selectedDatasourcePlugin
+            ? String(state.selectedDatasourcePlugin).trim()
+            : "";
+        if (!selectedDatasourcePlugin) {
+            state.graphFetchStatus = "error";
+            state.graphFetchErrorMessage = "Please choose a datasource plugin before loading.";
+            state.graphFetchLastLoadedAt = null;
+            state.graphFetchMeta = null;
+            renderAll();
+            return;
+        }
+
         clearGraphFetchSuccessHideTimeout();
         syncActiveWorkspaceFromState();
         state.graphFetchStatus = "loading";
@@ -425,7 +473,7 @@
         renderAll();
 
         try {
-            const payload = await apiClient.loadGraphFile(file);
+            const payload = await apiClient.loadGraphFile(file, selectedDatasourcePlugin);
             const graphState = toGraphState(payload.graph);
             if (!graphState) {
                 throw new Error("Invalid graph payload.");
@@ -633,11 +681,94 @@
         }
     }
 
+    function getDatasourcePluginFetchErrorMessage(error) {
+        if (error && typeof error.message === "string" && error.message.trim()) {
+            return error.message.trim();
+        }
+        return "Unexpected error.";
+    }
+
+    // Build datasource plugin dropdown option labels.
+    function getDatasourcePluginOptionLabel(plugin) {
+        if (!plugin || typeof plugin !== "object") {
+            return "";
+        }
+
+        const pluginId = typeof plugin.id === "string" ? plugin.id.trim() : "";
+        const pluginName = typeof plugin.name === "string" ? plugin.name.trim() : "";
+        const extensions = Array.isArray(plugin.extensions) ? plugin.extensions : [];
+        const extensionLabel = extensions.length ? ` [${extensions.join(", ")}]` : "";
+        if (pluginName && pluginName !== pluginId) {
+            return `${pluginName} (${pluginId})${extensionLabel}`;
+        }
+        return `${pluginId}${extensionLabel}`;
+    }
+
+    function getDatasourcePluginStatusLabel() {
+        if (state.datasourcePluginsStatus === "loading") {
+            return "Loading datasource plugins...";
+        }
+        if (state.datasourcePluginsStatus === "error") {
+            return state.datasourcePluginsErrorMessage || "Failed to load datasource plugins.";
+        }
+        if (!state.datasourcePlugins.length) {
+            return "No datasource plugins discovered.";
+        }
+        if (!state.selectedDatasourcePlugin) {
+            return "";
+        }
+
+        const selectedPlugin = state.datasourcePlugins.find(function (plugin) {
+            return plugin && plugin.id === state.selectedDatasourcePlugin;
+        });
+        if (!selectedPlugin) {
+            return `Datasource plugin: ${state.selectedDatasourcePlugin}`;
+        }
+        return `Datasource plugin: ${getDatasourcePluginOptionLabel(selectedPlugin)}`;
+    }
+
+    function renderDatasourcePluginSelect(selectElement) {
+        if (!selectElement) {
+            return;
+        }
+
+        const selectedDatasourcePlugin = state.selectedDatasourcePlugin || "";
+        const placeholderLabel = state.datasourcePluginsStatus === "loading"
+            ? "Loading datasource plugins..."
+            : "Select datasource plugin";
+
+        selectElement.innerHTML = "";
+
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = placeholderLabel;
+        selectElement.appendChild(placeholderOption);
+
+        state.datasourcePlugins.forEach(function (plugin) {
+            const option = document.createElement("option");
+            option.value = plugin.id;
+            option.textContent = getDatasourcePluginOptionLabel(plugin);
+            selectElement.appendChild(option);
+        });
+
+        selectElement.value = selectedDatasourcePlugin;
+        if (selectElement.value !== selectedDatasourcePlugin) {
+            state.selectedDatasourcePlugin = "";
+        }
+
+        selectElement.disabled =
+            state.graphFetchStatus === "loading" ||
+            state.datasourcePluginsStatus === "loading" ||
+            state.datasourcePlugins.length === 0;
+    }
+
     // Resolve file upload controls used by load/render workflow.
     function getFileInputElements() {
         return {
             fileInput: document.getElementById("graph-file-input"),
             loadButton: document.getElementById("load-graph-button"),
+            datasourceSelect: document.getElementById("datasource-plugin-select"),
+            datasourceStatus: document.getElementById("datasource-plugin-status"),
             selectedFileName: document.getElementById("selected-file-name"),
             status: document.getElementById("file-load-status")
         };
@@ -766,8 +897,11 @@
 
     // Build the file-upload helper/status line under the file picker.
     function getFileLoadStatusLabel() {
+        if (!state.selectedDatasourcePlugin) {
+            return "";
+        }
         if (!state.selectedUploadFile) {
-            return "Select a JSON or CSV file to load.";
+            return "";
         }
         if (state.graphFetchStatus === "loading") {
             return `Uploading ${state.selectedUploadFilename}...`;
@@ -785,18 +919,37 @@
     // Render file picker labels/buttons from current upload state.
     function renderFileInputState() {
         const refs = getFileInputElements();
+        renderDatasourcePluginSelect(refs.datasourceSelect);
+
+        if (refs.datasourceStatus) {
+            const datasourceStatusLabel = getDatasourcePluginStatusLabel();
+            refs.datasourceStatus.textContent = datasourceStatusLabel;
+            refs.datasourceStatus.hidden = !datasourceStatusLabel;
+            const hasDatasourceError =
+                state.datasourcePluginsStatus === "error" ||
+                (state.datasourcePluginsStatus === "success" && state.datasourcePlugins.length === 0);
+            refs.datasourceStatus.classList.toggle("is-error", hasDatasourceError);
+        }
+
         if (refs.selectedFileName) {
-            refs.selectedFileName.textContent = state.selectedUploadFile
+            const selectedFileNameLabel = state.selectedUploadFile
                 ? state.selectedUploadFilename
-                : "No file selected";
+                : "";
+            refs.selectedFileName.textContent = selectedFileNameLabel;
+            refs.selectedFileName.hidden = !selectedFileNameLabel;
         }
 
         if (refs.status) {
-            refs.status.textContent = getFileLoadStatusLabel();
+            const fileLoadStatusLabel = getFileLoadStatusLabel();
+            refs.status.textContent = fileLoadStatusLabel;
+            refs.status.hidden = !fileLoadStatusLabel;
         }
 
         if (refs.loadButton) {
-            refs.loadButton.disabled = state.graphFetchStatus === "loading" || !state.selectedUploadFile;
+            refs.loadButton.disabled =
+                state.graphFetchStatus === "loading" ||
+                !state.selectedUploadFile ||
+                !state.selectedDatasourcePlugin;
         }
     }
 
@@ -805,6 +958,20 @@
         const refs = getFileInputElements();
         if (!refs.fileInput) {
             return;
+        }
+
+        if (refs.datasourceSelect) {
+            refs.datasourceSelect.addEventListener("change", function (event) {
+                const selectedValue = event.target && typeof event.target.value === "string"
+                    ? event.target.value.trim()
+                    : "";
+                state.selectedDatasourcePlugin = selectedValue;
+                clearGraphFetchSuccessHideTimeout();
+                if (state.graphFetchStatus === "success") {
+                    state.graphFetchStatus = "idle";
+                }
+                renderAll();
+            });
         }
 
         refs.fileInput.addEventListener("change", function (event) {
@@ -1227,6 +1394,7 @@
             renderBirdView();
         });
         renderAll();
+        loadDatasourcePlugins();
     }
 
     document.addEventListener("DOMContentLoaded", initializeApp);

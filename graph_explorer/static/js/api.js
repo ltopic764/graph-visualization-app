@@ -2,6 +2,7 @@
     "use strict";
 
     const ENDPOINTS = Object.freeze({
+        datasourcePlugins: "/api/datasources/",
         graphLoad: "/api/graph/load/",
         cliExecute: "/api/cli/execute/",
         graphSearch: "/api/graph/search/",
@@ -66,9 +67,10 @@
     }
 
     // Upload a graph file and return a validated graph payload from the backend.
-    async function loadGraphFile(file) {
+    async function loadGraphFile(file, datasourcePlugin) {
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("datasource", datasourcePlugin);
 
         const response = await fetch(ENDPOINTS.graphLoad, {
             method: "POST",
@@ -104,6 +106,54 @@
         };
     }
 
+    // Load datasource plugins discovered by backend plugin registry.
+    async function loadDatasourcePlugins() {
+        const response = await fetch(ENDPOINTS.datasourcePlugins, {
+            method: "GET",
+            headers: { Accept: "application/json" }
+        });
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            const errorMessage = payload && payload.error ? payload.error : `HTTP ${response.status}`;
+            throw new Error(errorMessage);
+        }
+
+        const rawDatasources = payload && Array.isArray(payload.datasources) ? payload.datasources : null;
+        if (!payload || payload.ok !== true || !rawDatasources) {
+            throw new Error("Invalid datasource plugin response shape; expected { ok, datasources }.");
+        }
+
+        return rawDatasources
+            .map(function (item) {
+                if (!item || typeof item !== "object") {
+                    return null;
+                }
+                const id = typeof item.id === "string" ? item.id.trim() : "";
+                const name = typeof item.name === "string" ? item.name.trim() : "";
+                const extensions = Array.isArray(item.extensions)
+                    ? item.extensions.filter(function (entry) {
+                        return typeof entry === "string" && entry.trim().length > 0;
+                    })
+                    : [];
+                if (!id) {
+                    return null;
+                }
+                return {
+                    id: id,
+                    name: name || id,
+                    extensions: extensions
+                };
+            })
+            .filter(Boolean);
+    }
+
     // Build a render endpoint URL for a specific graph, visualizer, and direction mode.
     function buildVisualizerRenderUrl(visualizerId, isDirected, graphId) {
         const params = new URLSearchParams({
@@ -132,6 +182,7 @@
     global.GraphExplorerApi = {
         ENDPOINTS: ENDPOINTS,
         postJsonRequest: postJsonRequest,
+        loadDatasourcePlugins: loadDatasourcePlugins,
         loadGraphFile: loadGraphFile,
         loadVisualizerOutput: loadVisualizerOutput
     };

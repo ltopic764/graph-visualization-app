@@ -7,6 +7,7 @@ app_name = "explorer"
 urlpatterns = [
     path("", views.index, name="index"),
     path("api/mock-graph/", views.mock_graph_api, name="mock-graph-api"),
+    path("api/datasources/", views.datasource_plugins_api, name="datasource-plugins-api"),
     path("api/graph/load/", views.load_graph_api, name="graph-load-api"),
     path("api/cli/execute/", views.cli_execute_api, name="cli-execute-api"),
     path("api/graph/search/", views.graph_search_api, name="graph-search-api"),

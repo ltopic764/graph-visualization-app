@@ -4,6 +4,7 @@ import time
 import json
 import logging
 import datetime
+import re
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -52,6 +53,9 @@ DATASOURCE_BY_EXTENSION = {
     ".json": "json",
     ".csv": "csv",
 }
+DATASOURCE_EXTENSIONS_BY_PLUGIN: dict[str, set[str]] = {}
+for extension, plugin_name in DATASOURCE_BY_EXTENSION.items():
+    DATASOURCE_EXTENSIONS_BY_PLUGIN.setdefault(plugin_name, set()).add(extension)
 SUPPORTED_VISUALIZERS = {"simple", "block"}
 
 
@@ -107,18 +111,49 @@ def _format_available_plugins(plugin_names: list[str]) -> str:
     return f" (available: {', '.join(sorted(plugin_names))})"
 
 
-def _build_datasource_map() -> dict[str, tuple[str, object | None, str]]:
+def _build_datasource_plugin_payloads() -> list[dict[str, object]]:
+    # Build datasource plugin options directly from registry discovery.
     registry = PluginRegistry()
-    discovered = registry.list_datasources()
-    missing_detail = _format_available_plugins(discovered)
-    return {
-        extension: (
-            plugin_name,
-            registry.get_datasource(plugin_name),
-            missing_detail,
+    payloads: list[dict[str, object]] = []
+    for datasource_name in sorted(registry.list_datasources()):
+        display_name = datasource_name
+        datasource_cls = registry.get_datasource(datasource_name)
+        if datasource_cls is not None:
+            try:
+                datasource = datasource_cls()
+                resolved_display_name = getattr(datasource, "display_name", None)
+                if isinstance(resolved_display_name, str) and resolved_display_name.strip():
+                    display_name = resolved_display_name.strip()
+            except Exception:
+                pass
+
+        payloads.append(
+            {
+                "id": datasource_name,
+                "name": display_name,
+                "extensions": sorted(DATASOURCE_EXTENSIONS_BY_PLUGIN.get(datasource_name, set())),
+            }
         )
-        for extension, plugin_name in DATASOURCE_BY_EXTENSION.items()
-    }
+    return payloads
+
+
+def _validate_datasource_file_match(datasource_name: str, extension: str) -> str | None:
+    # Reject obvious extension mismatches for known datasource plugins.
+    if not extension:
+        return None
+
+    expected_extensions = DATASOURCE_EXTENSIONS_BY_PLUGIN.get(datasource_name)
+    if not expected_extensions:
+        return None
+
+    if extension in expected_extensions:
+        return None
+
+    expected_label = ", ".join(sorted(expected_extensions))
+    return (
+        f"Selected datasource plugin '{datasource_name}' does not match file extension '{extension}'. "
+        f"Expected: {expected_label}."
+    )
 
 
 def _load_graph_from_upload(uploaded_file: UploadedFile, suffix: str, datasource_cls: object) -> Graph:
@@ -160,6 +195,16 @@ def index(request: HttpRequest) -> HttpResponse:
 
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
+
+
+@require_GET
+def datasource_plugins_api(request: HttpRequest) -> JsonResponse:
+    return JsonResponse(
+        {
+            "ok": True,
+            "datasources": _build_datasource_plugin_payloads(),
+        }
+    )
 
 
 def _parse_flag(tokens: list[str], name: str) -> str | None:
@@ -294,13 +339,132 @@ def _parse_properties(tokens: list[str]) -> dict:
             i += 1
     return props
 
+def _graph_to_payload(graph: Graph) -> dict:
+    return {
+        "nodes": [n.to_dict() for n in graph.nodes],
+        "edges": [e.to_dict() for e in graph.edges],
+    }
+
+
+def _reset_graph_state(graph_id: str) -> Graph:
+    original_graph = ORIGINAL_GRAPHS.get(graph_id)
+    if not original_graph:
+        raise ValueError("Graph not found")
+
+    fresh_graph = _clone_graph(original_graph)
+    ACTIVE_GRAPHS[graph_id] = fresh_graph
+
+    workspace = WORKSPACES.get(graph_id)
+    if workspace is None:
+        workspace = Workspace()
+        WORKSPACES[graph_id] = workspace
+
+    workspace.clear()
+    workspace.set_graph(fresh_graph)
+    return fresh_graph
+
+def _clear_graph_state(graph_id: str) -> Graph:
+    workspace = WORKSPACES.get(graph_id)
+
+    if workspace is None:
+        workspace = Workspace()
+        WORKSPACES[graph_id] = workspace
+
+    current_graph = (
+        ACTIVE_GRAPHS.get(graph_id)
+        or workspace.get_graph()
+        or ORIGINAL_GRAPHS.get(graph_id)
+    )
+
+    directed = getattr(current_graph, "directed", True) if current_graph else True
+    empty_graph = Graph(directed=directed)
+
+    ACTIVE_GRAPHS[graph_id] = empty_graph
+    ORIGINAL_GRAPHS[graph_id] = _clone_graph(empty_graph)
+
+    workspace.clear()
+    workspace.set_graph(empty_graph)
+
+    return empty_graph
+
+
+def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) -> Graph:
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        raise ValueError("Graph not found")
+
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
+
+    query = query.strip()
+
+    # Ako je query oblika Name=Tom, tretiraj kao precizan atributski search
+    if "=" in query and "==" not in query and "!=" not in query and ">=" not in query and "<=" not in query:
+        attribute, value = query.split("=", 1)
+        matched_nodes = workspace.find_nodes_by_attribute(attribute.strip(), "==", value.strip())
+    else:
+        matched_nodes = workspace.find_nodes_by_query_contains(query)
+
+    matched_ids = {str(n.node_id) for n in matched_nodes}
+    filtered_graph = _build_subgraph(current_graph, matched_ids)
+
+    ACTIVE_GRAPHS[graph_id] = filtered_graph
+    workspace.set_graph(filtered_graph)
+    return filtered_graph
+
+
+def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
+    condition = condition.strip()
+
+    match = re.match(r"^(.+?)(==|!=|>=|<=|>|<|=)(.+)$", condition)
+    if not match:
+        raise ValueError(f"Invalid filter condition: '{condition}'")
+
+    attribute = match.group(1).strip()
+    operator = match.group(2).strip()
+    value = match.group(3).strip()
+
+    if operator == "=":
+        operator = "=="
+
+    return attribute, operator, value
+
+
+def _apply_filter_expression_to_workspace(graph_id: str, workspace: Workspace, expression: str) -> Graph:
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        raise ValueError("Graph not found")
+
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
+
+    expression = expression.strip()
+    conditions = [c.strip() for c in expression.split("&&") if c.strip()]
+    if not conditions:
+        raise ValueError("Empty filter expression")
+
+    temp_graph = current_graph
+
+    for condition in conditions:
+        attribute, operator, value = _parse_filter_condition(condition)
+        workspace.set_graph(temp_graph)
+        matched_nodes = workspace.find_nodes_by_attribute(attribute, operator, value)
+        matched_ids = {str(n.node_id) for n in matched_nodes}
+        temp_graph = _build_subgraph(temp_graph, matched_ids)
+
+    ACTIVE_GRAPHS[graph_id] = temp_graph
+    workspace.set_graph(temp_graph)
+    return temp_graph
+
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
-    if method_error: return method_error
+    if method_error:
+        return method_error
 
     body, error_response = _parse_json_body(request)
-    if error_response: return error_response
+    if error_response:
+        return error_response
 
     graph_id = body.get("graph_id")
     command = (body.get("command") or "").strip()
@@ -314,10 +478,62 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
     try:
         tokens = shlex.split(command)
+        if not tokens:
+            raise ValueError("Empty command")
+
+        action = tokens[0].lower()
+
+        # SEARCH
+        if action == "search":
+            if len(tokens) < 2:
+                raise ValueError("Invalid search command. Use: search 'Name=Tom'")
+
+            query = " ".join(tokens[1:]).strip()
+            updated_graph = _apply_search_to_workspace(graph_id, workspace, query)
+
+            return JsonResponse({
+                "ok": True,
+                "message": f"OK: Search applied ({query})",
+                "graph": _graph_to_payload(updated_graph)
+            }, status=200)
+
+        # FILTER
+        if action == "filter":
+            if len(tokens) < 2:
+                raise ValueError("Invalid filter command. Use: filter 'Age>30 && Height>=150'")
+
+            expression = " ".join(tokens[1:]).strip()
+            updated_graph = _apply_filter_expression_to_workspace(graph_id, workspace, expression)
+
+            return JsonResponse({
+                "ok": True,
+                "message": f"OK: Filter applied ({expression})",
+                "graph": _graph_to_payload(updated_graph)
+            }, status=200)
+
+        # CLEAR / CLEAR GRAPH
+        
+        if action == "clear":
+            if len(tokens) == 1 or (len(tokens) == 2 and tokens[1].lower() == "graph"):
+                cleared_graph = _clear_graph_state(graph_id)
+
+                return JsonResponse({
+                    "ok": True,
+                    "message": "OK: Graph canvas cleared",
+                    "graph": cleared_graph.to_dict()
+                }, status=200)
+
+            raise ValueError("Invalid clear command. Use: clear or clear graph")
+
+        # Existing NODE / EDGE commands
+        # create/edit/delete node/edge ...
+
         if len(tokens) < 2:
             raise ValueError("Invalid command. format: [action] [subject] --flags")
 
         subject = tokens[1].lower()
+        obj_id = _parse_flag(tokens, "--id")
+        props = _parse_properties(tokens)
 
         # Command delegation by subject
         if subject == "node":
@@ -325,9 +541,11 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
         elif subject == "edge":
             msg = _execute_edge_command(workspace, tokens)
         else:
-            raise ValueError(f"Unknown subject '{subject}'. Use 'node' or 'edge'.")
+            raise ValueError(
+                f"Unknown command '{action}' or subject '{subject}'. "
+                f"Supported: create/edit/delete node|edge, search, filter, clear"
+            )
 
-        # Update global map and save graph state
         updated_graph = workspace.get_graph()
         ACTIVE_GRAPHS[graph_id] = updated_graph
 
@@ -339,6 +557,16 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
+    
+def _build_empty_graph_like(graph: Graph | None = None) -> Graph:
+    if Graph is None:
+        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
+
+    is_directed = True
+    if graph is not None:
+        is_directed = getattr(graph, "directed", True)
+
+    return Graph(directed=is_directed)
 
 
 def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
@@ -581,22 +809,27 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
     if uploaded_file is None:
         return _json_error("missing file", status=400)
 
+    datasource_name = str(request.POST.get("datasource") or "").strip()
+    if not datasource_name:
+        return _json_error("Missing datasource plugin selection.", status=400)
+
+    registry = PluginRegistry()
+    datasource_cls = registry.get_datasource(datasource_name)
+    if datasource_cls is None:
+        available_detail = _format_available_plugins(registry.list_datasources())
+        return _json_error(f"Datasource plugin '{datasource_name}' is not available{available_detail}", status=400)
+
     filename = str(uploaded_file.name or "uploaded-file")
     extension = Path(filename).suffix.lower()
-    datasource_map = _build_datasource_map()
-
-    if extension not in datasource_map:
-        return _json_error("Unsupported file extension. Allowed extensions are .json and .csv.", status=400)
-
-    source_name, datasource_cls, missing_detail = datasource_map[extension]
-    if datasource_cls is None:
-        return _json_error(f"The '{source_name}' datasource plugin is not available{missing_detail}", status=501)
+    mismatch_error = _validate_datasource_file_match(datasource_name, extension)
+    if mismatch_error:
+        return _json_error(mismatch_error, status=400)
 
     try:
         try:
             graph = _load_graph_from_upload(uploaded_file=uploaded_file, suffix=extension, datasource_cls=datasource_cls)
         except Exception as exc:
-            return _json_error(f"Failed to parse '{filename}' as {source_name}: {exc}", status=400)
+            return _json_error(f"Failed to parse '{filename}' as {datasource_name}: {exc}", status=400)
 
         graph_id = str(uuid4())
         original_graph = _clone_graph(graph)
@@ -619,7 +852,7 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
                     "node_count": len(nodes) if isinstance(nodes, list) else 0,
                     "edge_count": len(edges) if isinstance(edges, list) else 0,
                     "filename": filename,
-                    "source": source_name,
+                    "source": datasource_name,
                 },
                 "graph": graph_payload,
             },
