@@ -15,6 +15,7 @@
     const SUCCESS_STATUS_AUTO_HIDE_MS = 5000;
     const FILTER_ERROR_AUTO_HIDE_MS = 3500;
     const SVG_NS = "http://www.w3.org/2000/svg";
+    const BIRD_VIEW_ZOOM_OUT_FACTOR = 1.25;
     let graphFetchSuccessHideTimeoutId = null;
     let filterErrorHideTimeoutId = null;
     let visualizerRenderRequestSequence = 0;
@@ -549,6 +550,67 @@
         return 0;
     }
 
+    function getMainVisibleGraphRect(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        if (!sourceContext || !sourceContext.scrollEl) {
+            return null;
+        }
+
+        const zoomScale = getMainZoomScale(sourceContext);
+        if (!Number.isFinite(zoomScale) || zoomScale <= 0) {
+            return null;
+        }
+
+        const panX = getMainPanOffset(sourceContext, "x");
+        const panY = getMainPanOffset(sourceContext, "y");
+        const visibleGraphW = sourceContext.scrollEl.clientWidth / zoomScale;
+        const visibleGraphH = sourceContext.scrollEl.clientHeight / zoomScale;
+        if (!Number.isFinite(visibleGraphW) || !Number.isFinite(visibleGraphH) || visibleGraphW <= 0 || visibleGraphH <= 0) {
+            return null;
+        }
+
+        return {
+            x: (sourceContext.scrollEl.scrollLeft - panX) / zoomScale,
+            y: (sourceContext.scrollEl.scrollTop - panY) / zoomScale,
+            width: visibleGraphW,
+            height: visibleGraphH
+        };
+    }
+
+    function getExpandedRect(rect, factor) {
+        if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+            return null;
+        }
+
+        const zoomOutFactor = Number.isFinite(factor) && factor > 1 ? factor : 1;
+        const expandedWidth = rect.width * zoomOutFactor;
+        const expandedHeight = rect.height * zoomOutFactor;
+        const deltaW = expandedWidth - rect.width;
+        const deltaH = expandedHeight - rect.height;
+
+        return {
+            x: rect.x - (deltaW / 2),
+            y: rect.y - (deltaH / 2),
+            width: expandedWidth,
+            height: expandedHeight
+        };
+    }
+
+    function setSvgViewBox(svg, rect) {
+        if (!svg || !rect) {
+            return false;
+        }
+        if (!Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) {
+            return false;
+        }
+        if (rect.width <= 0 || rect.height <= 0) {
+            return false;
+        }
+
+        svg.setAttribute("viewBox", `${rect.x} ${rect.y} ${rect.width} ${rect.height}`);
+        return true;
+    }
+
     function syncBirdIframeToMain() {
         const mainIframe = document.getElementById("main-view-visualizer-iframe");
         const birdIframe = document.getElementById("bird-view-iframe");
@@ -678,6 +740,58 @@
         return rect;
     }
 
+    function syncBirdGraphGeometryFromMain(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!sourceContext || !sourceContext.iframeDoc || !birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const mainEdges = sourceContext.iframeDoc.getElementById("viz-edges");
+        const mainNodes = sourceContext.iframeDoc.getElementById("viz-nodes");
+        const birdDoc = birdIframe.contentDocument;
+        const birdEdges = birdDoc.getElementById("viz-edges");
+        const birdNodes = birdDoc.getElementById("viz-nodes");
+        if (!mainEdges || !mainNodes || !birdEdges || !birdNodes) {
+            return;
+        }
+
+        const mainEdgesHtml = mainEdges.innerHTML;
+        const mainNodesHtml = mainNodes.innerHTML;
+        if (birdEdges.innerHTML !== mainEdgesHtml) {
+            birdEdges.innerHTML = mainEdgesHtml;
+        }
+        if (birdNodes.innerHTML !== mainNodesHtml) {
+            birdNodes.innerHTML = mainNodesHtml;
+        }
+    }
+
+    function syncBirdViewBoxToMain(context) {
+        const sourceContext = context || getMainVisualizerContext();
+        const birdIframe = document.getElementById("bird-view-iframe");
+        if (!birdIframe || !birdIframe.contentDocument) {
+            return;
+        }
+
+        const birdDoc = birdIframe.contentDocument;
+        const svg = birdDoc.getElementById("viz-svg");
+        if (!svg) {
+            return;
+        }
+
+        const visibleRect = getMainVisibleGraphRect(sourceContext);
+        const expandedRect = getExpandedRect(visibleRect, BIRD_VIEW_ZOOM_OUT_FACTOR);
+        if (setSvgViewBox(svg, expandedRect)) {
+            return;
+        }
+
+        const bounds = computeBirdGraphBounds(svg);
+        if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+            return;
+        }
+        setSvgViewBox(svg, getExpandedRect(bounds, BIRD_VIEW_ZOOM_OUT_FACTOR));
+    }
+
     function configureBirdIframeDocument() {
         const birdIframe = document.getElementById("bird-view-iframe");
         if (!birdIframe || !birdIframe.contentDocument) {
@@ -707,12 +821,6 @@
             birdDoc.body.style.height = "100%";
         }
 
-        const bounds = computeBirdGraphBounds(svg);
-        if (bounds && bounds.width > 0 && bounds.height > 0) {
-            const pad = 20;
-            svg.setAttribute("viewBox", `${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}`);
-        }
-
         svg.removeAttribute("width");
         svg.removeAttribute("height");
         svg.style.width = "100%";
@@ -720,6 +828,8 @@
         svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
         ensureBirdViewportRect(birdDoc, svg);
+        syncBirdGraphGeometryFromMain();
+        syncBirdViewBoxToMain();
     }
 
     function getCssEscapedAttributeValue(value) {
@@ -766,21 +876,20 @@
             return;
         }
         const birdRect = ensureBirdViewportRect(birdDoc, birdSvg);
-        const zoomScale = getMainZoomScale(sourceContext);
-        const panX = getMainPanOffset(sourceContext, "x");
-        const panY = getMainPanOffset(sourceContext, "y");
-        const visibleGraphX = (sourceContext.scrollEl.scrollLeft - panX) / zoomScale;
-        const visibleGraphY = (sourceContext.scrollEl.scrollTop - panY) / zoomScale;
-        const visibleGraphW = sourceContext.scrollEl.clientWidth / zoomScale;
-        const visibleGraphH = sourceContext.scrollEl.clientHeight / zoomScale;
+        const visibleRect = getMainVisibleGraphRect(sourceContext);
+        if (!visibleRect) {
+            return;
+        }
 
-        birdRect.setAttribute("x", String(visibleGraphX));
-        birdRect.setAttribute("y", String(visibleGraphY));
-        birdRect.setAttribute("width", String(visibleGraphW));
-        birdRect.setAttribute("height", String(visibleGraphH));
+        birdRect.setAttribute("x", String(visibleRect.x));
+        birdRect.setAttribute("y", String(visibleRect.y));
+        birdRect.setAttribute("width", String(visibleRect.width));
+        birdRect.setAttribute("height", String(visibleRect.height));
     }
 
     function refreshBirdViewportAndFocus(context) {
+        syncBirdGraphGeometryFromMain(context);
+        syncBirdViewBoxToMain(context);
         updateBirdViewportRect(context);
         updateBirdSelectionHighlight();
     }
@@ -824,7 +933,25 @@
             });
             birdViewSync.boundMainSvgObserver.observe(context.mainSvg, {
                 attributes: true,
-                attributeFilter: ["style", "data-zoom-scale", "data-pan-x", "data-pan-y", "viewBox", "transform"]
+                childList: true,
+                subtree: true,
+                attributeFilter: [
+                    "style",
+                    "class",
+                    "data-zoom-scale",
+                    "data-pan-x",
+                    "data-pan-y",
+                    "viewBox",
+                    "transform",
+                    "x",
+                    "y",
+                    "x1",
+                    "y1",
+                    "x2",
+                    "y2",
+                    "width",
+                    "height"
+                ]
             });
             birdViewSync.boundMainSvg = context.mainSvg;
         }
