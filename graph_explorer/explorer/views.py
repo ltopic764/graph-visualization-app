@@ -53,6 +53,9 @@ DATASOURCE_BY_EXTENSION = {
     ".json": "json",
     ".csv": "csv",
 }
+DATASOURCE_EXTENSIONS_BY_PLUGIN: dict[str, set[str]] = {}
+for extension, plugin_name in DATASOURCE_BY_EXTENSION.items():
+    DATASOURCE_EXTENSIONS_BY_PLUGIN.setdefault(plugin_name, set()).add(extension)
 SUPPORTED_VISUALIZERS = {"simple", "block"}
 
 
@@ -108,18 +111,49 @@ def _format_available_plugins(plugin_names: list[str]) -> str:
     return f" (available: {', '.join(sorted(plugin_names))})"
 
 
-def _build_datasource_map() -> dict[str, tuple[str, object | None, str]]:
+def _build_datasource_plugin_payloads() -> list[dict[str, object]]:
+    # Build datasource plugin options directly from registry discovery.
     registry = PluginRegistry()
-    discovered = registry.list_datasources()
-    missing_detail = _format_available_plugins(discovered)
-    return {
-        extension: (
-            plugin_name,
-            registry.get_datasource(plugin_name),
-            missing_detail,
+    payloads: list[dict[str, object]] = []
+    for datasource_name in sorted(registry.list_datasources()):
+        display_name = datasource_name
+        datasource_cls = registry.get_datasource(datasource_name)
+        if datasource_cls is not None:
+            try:
+                datasource = datasource_cls()
+                resolved_display_name = getattr(datasource, "display_name", None)
+                if isinstance(resolved_display_name, str) and resolved_display_name.strip():
+                    display_name = resolved_display_name.strip()
+            except Exception:
+                pass
+
+        payloads.append(
+            {
+                "id": datasource_name,
+                "name": display_name,
+                "extensions": sorted(DATASOURCE_EXTENSIONS_BY_PLUGIN.get(datasource_name, set())),
+            }
         )
-        for extension, plugin_name in DATASOURCE_BY_EXTENSION.items()
-    }
+    return payloads
+
+
+def _validate_datasource_file_match(datasource_name: str, extension: str) -> str | None:
+    # Reject obvious extension mismatches for known datasource plugins.
+    if not extension:
+        return None
+
+    expected_extensions = DATASOURCE_EXTENSIONS_BY_PLUGIN.get(datasource_name)
+    if not expected_extensions:
+        return None
+
+    if extension in expected_extensions:
+        return None
+
+    expected_label = ", ".join(sorted(expected_extensions))
+    return (
+        f"Selected datasource plugin '{datasource_name}' does not match file extension '{extension}'. "
+        f"Expected: {expected_label}."
+    )
 
 
 def _load_graph_from_upload(uploaded_file: UploadedFile, suffix: str, datasource_cls: object) -> Graph:
@@ -161,6 +195,16 @@ def index(request: HttpRequest) -> HttpResponse:
 
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(MOCK_GRAPH_DATA)
+
+
+@require_GET
+def datasource_plugins_api(request: HttpRequest) -> JsonResponse:
+    return JsonResponse(
+        {
+            "ok": True,
+            "datasources": _build_datasource_plugin_payloads(),
+        }
+    )
 
 
 def _parse_flag(tokens: list[str], name: str) -> str | None:
@@ -726,22 +770,27 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
     if uploaded_file is None:
         return _json_error("missing file", status=400)
 
+    datasource_name = str(request.POST.get("datasource") or "").strip()
+    if not datasource_name:
+        return _json_error("Missing datasource plugin selection.", status=400)
+
+    registry = PluginRegistry()
+    datasource_cls = registry.get_datasource(datasource_name)
+    if datasource_cls is None:
+        available_detail = _format_available_plugins(registry.list_datasources())
+        return _json_error(f"Datasource plugin '{datasource_name}' is not available{available_detail}", status=400)
+
     filename = str(uploaded_file.name or "uploaded-file")
     extension = Path(filename).suffix.lower()
-    datasource_map = _build_datasource_map()
-
-    if extension not in datasource_map:
-        return _json_error("Unsupported file extension. Allowed extensions are .json and .csv.", status=400)
-
-    source_name, datasource_cls, missing_detail = datasource_map[extension]
-    if datasource_cls is None:
-        return _json_error(f"The '{source_name}' datasource plugin is not available{missing_detail}", status=501)
+    mismatch_error = _validate_datasource_file_match(datasource_name, extension)
+    if mismatch_error:
+        return _json_error(mismatch_error, status=400)
 
     try:
         try:
             graph = _load_graph_from_upload(uploaded_file=uploaded_file, suffix=extension, datasource_cls=datasource_cls)
         except Exception as exc:
-            return _json_error(f"Failed to parse '{filename}' as {source_name}: {exc}", status=400)
+            return _json_error(f"Failed to parse '{filename}' as {datasource_name}: {exc}", status=400)
 
         graph_id = str(uuid4())
         original_graph = _clone_graph(graph)
@@ -764,7 +813,7 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
                     "node_count": len(nodes) if isinstance(nodes, list) else 0,
                     "edge_count": len(edges) if isinstance(edges, list) else 0,
                     "filename": filename,
-                    "source": source_name,
+                    "source": datasource_name,
                 },
                 "graph": graph_payload,
             },

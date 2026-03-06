@@ -29,8 +29,8 @@
         // Resolve workspace selector elements from the current document.
         function getWorkspaceSelectorElements() {
             return {
-                list: document.getElementById("workspace-selector-list"),
-                empty: document.getElementById("workspace-selector-empty")
+                area: document.getElementById("workspace-selector-area"),
+                list: document.getElementById("workspace-selector-list")
             };
         }
 
@@ -45,14 +45,14 @@
             const workspaceIdsSource = getWorkspaceIds();
             const workspaceIds = Array.isArray(workspaceIdsSource) ? workspaceIdsSource : [];
             if (!workspaceIds.length) {
-                if (refs.empty) {
-                    refs.empty.hidden = false;
+                if (refs.area) {
+                    refs.area.hidden = true;
                 }
                 return;
             }
 
-            if (refs.empty) {
-                refs.empty.hidden = true;
+            if (refs.area) {
+                refs.area.hidden = false;
             }
 
             const activeGraphId = getActiveGraphId();

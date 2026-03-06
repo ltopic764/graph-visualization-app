@@ -15,13 +15,12 @@
                     >
                     <button id="load-graph-button" type="button" class="placeholder-button">Load</button>
                 </div>
-                <div class="toolbar-inline-feedback">
-                    <span id="selected-file-name" class="placeholder-text">No file selected</span>
-                    <p id="file-load-status" class="toolbar-feedback">Select a JSON or CSV file to load.</p>
+                <div class="datasource-row">
+                    <label for="datasource-plugin-select">Datasource</label>
+                    <select id="datasource-plugin-select" aria-label="Datasource plugin selector"></select>
                 </div>
-                <div id="workspace-selector-area" class="workspace-selector-area">
+                <div id="workspace-selector-area" class="workspace-selector-area" hidden>
                     <div id="workspace-selector-list" class="workspace-selector-list" role="tablist" aria-label="Workspace selector"></div>
-                    <p id="workspace-selector-empty" class="toolbar-feedback">No workspaces loaded</p>
                 </div>
             </section>
 
