@@ -202,6 +202,40 @@ def _clone_graph(graph: Graph) -> Graph:
     return g2
 
 
+def _build_subgraph(graph: Graph, node_ids: set[str]) -> Graph:
+    if Graph is None or Node is None or Edge is None:
+        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
+
+    subgraph = Graph(directed=getattr(graph, "directed", True))
+
+    for node in graph.nodes:
+        if node.node_id not in node_ids:
+            continue
+        subgraph.add_node(
+            Node(
+                node_id=str(node.node_id),
+                label=getattr(node, "label", "") or str(node.node_id),
+                attributes=deepcopy(getattr(node, "attributes", {}) or {}),
+            )
+        )
+
+    for edge in graph.edges:
+        if edge.source not in node_ids or edge.target not in node_ids:
+            continue
+        subgraph.add_edge(
+            Edge(
+                source=str(edge.source),
+                target=str(edge.target),
+                edge_id=getattr(edge, "edge_id", None),
+                weight=getattr(edge, "weight", 1.0),
+                directed=getattr(edge, "directed", getattr(graph, "directed", True)),
+                attributes=deepcopy(getattr(edge, "attributes", {}) or {}),
+            )
+        )
+
+    return subgraph
+
+
 def _to_json_safe_value(value):
     if isinstance(value, datetime.datetime):
         return value.isoformat()
@@ -396,40 +430,33 @@ def graph_search_api(request: HttpRequest) -> JsonResponse:
     if not workspace:
         return _json_error("Graph not found", 404)
 
-    current_graph = (
-        ACTIVE_GRAPHS.get(graph_id)
-        or ORIGINAL_GRAPHS.get(graph_id)
-        or workspace.get_graph()
-    )
-    allowed_node_ids = {n.node_id for n in current_graph.nodes} if current_graph else None
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        return _json_error("Graph not found", 404)
 
-    if workspace.get_graph() is None or workspace.get_graph() is not current_graph:
-        if current_graph is not None:
-            workspace.set_graph(current_graph)
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
 
-    matched_nodes = workspace.find_nodes_by_query_contains(query, allowed_node_ids=allowed_node_ids)
+    matched_nodes = workspace.find_nodes_by_query_contains(query)
     matched_ids = {n.node_id for n in matched_nodes}
 
-    edges_source = current_graph.edges if current_graph else workspace.list_edges()
-    matched_edges = [
-        e for e in edges_source
-        if e.source in matched_ids and e.target in matched_ids
-    ]
-
     if Graph is not None and Node is not None and Edge is not None:
-        directed = getattr(current_graph, "directed", True)
-        filtered_graph = Graph(directed=directed)
-        for node in matched_nodes:
-            filtered_graph.add_node(node)
-        for edge in matched_edges:
-            filtered_graph.add_edge(edge)
+        filtered_graph = _build_subgraph(current_graph, matched_ids)
         ACTIVE_GRAPHS[graph_id] = filtered_graph
         workspace.set_graph(filtered_graph)
-
-    subgraph = {
-        "nodes": [n.to_dict() for n in matched_nodes],
-        "edges": [e.to_dict() for e in matched_edges],
-    }
+        subgraph = {
+            "nodes": [n.to_dict() for n in filtered_graph.nodes],
+            "edges": [e.to_dict() for e in filtered_graph.edges],
+        }
+    else:
+        matched_edges = [
+            e for e in current_graph.edges
+            if e.source in matched_ids and e.target in matched_ids
+        ]
+        subgraph = {
+            "nodes": [n.to_dict() for n in matched_nodes],
+            "edges": [e.to_dict() for e in matched_edges],
+        }
 
     return JsonResponse({"ok": True, "matched_ids": list(matched_ids), "graph": subgraph})
 
@@ -456,42 +483,37 @@ def graph_filter_api(request: HttpRequest) -> JsonResponse:
     if not workspace:
         return _json_error("Graph not found", 404)
 
-    current_graph = ACTIVE_GRAPHS.get(graph_id)
-    current_node_ids = {n.node_id for n in current_graph.nodes} if current_graph else None
+    current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
+    if current_graph is None:
+        return _json_error("Graph not found", 404)
+
+    if workspace.get_graph() is not current_graph:
+        workspace.set_graph(current_graph)
 
     try:
-        all_matched = workspace.find_nodes_by_attribute(attribute, operator, value)
+        matched_nodes = workspace.find_nodes_by_attribute(attribute, operator, value)
     except ValueError as exc:
         return _json_error(str(exc), 400)
 
-    if current_node_ids is not None:
-        matched_nodes = [n for n in all_matched if n.node_id in current_node_ids]
-    else:
-        matched_nodes = all_matched
-
     matched_ids = {n.node_id for n in matched_nodes}
 
-    matched_edges = [
-        e for e in workspace.list_edges()
-        if e.source in matched_ids and e.target in matched_ids
-    ]
-
-    # Napravi novi Graph objekat sa filtriranim nodovima i edges
     if Graph is not None and Node is not None and Edge is not None:
-        original_graph = ACTIVE_GRAPHS.get(graph_id)
-        directed = getattr(original_graph, "directed", True)
-        filtered_graph = Graph(directed=directed)
-        for node in matched_nodes:
-            filtered_graph.add_node(node)
-        for edge in matched_edges:
-            filtered_graph.add_edge(edge)
-        # Sacuvaj filtrirani graf pod istim graph_id da ga visualizer moze naci
+        filtered_graph = _build_subgraph(current_graph, matched_ids)
         ACTIVE_GRAPHS[graph_id] = filtered_graph
-
-    subgraph = {
-        "nodes": [n.to_dict() for n in matched_nodes],
-        "edges": [e.to_dict() for e in matched_edges],
-    }
+        workspace.set_graph(filtered_graph)
+        subgraph = {
+            "nodes": [n.to_dict() for n in filtered_graph.nodes],
+            "edges": [e.to_dict() for e in filtered_graph.edges],
+        }
+    else:
+        matched_edges = [
+            e for e in current_graph.edges
+            if e.source in matched_ids and e.target in matched_ids
+        ]
+        subgraph = {
+            "nodes": [n.to_dict() for n in matched_nodes],
+            "edges": [e.to_dict() for e in matched_edges],
+        }
 
     return JsonResponse({"ok": True, "graph": subgraph})
 
@@ -514,26 +536,20 @@ def workspace_reset_api(request: HttpRequest) -> JsonResponse:
     if not original_graph:
         return _json_error("Graph not found", 404)
 
-    #Vrati originalni graf
-    ACTIVE_GRAPHS[graph_id] = original_graph
+    fresh_graph = _clone_graph(original_graph)
+    ACTIVE_GRAPHS[graph_id] = fresh_graph
+
+    workspace = WORKSPACES.get(graph_id)
+    if workspace is None:
+        workspace = Workspace()
+        WORKSPACES[graph_id] = workspace
+    workspace.clear()
+    workspace.set_graph(fresh_graph)
 
     return JsonResponse({
         "ok": True,
-        "graph": original_graph.to_dict()
+        "graph": fresh_graph.to_dict()
     })
-
-    # original_graph = ORIGINAL_GRAPHS.get(graph_id)
-    # if not original_graph:
-    #     return _json_error("Graph not found", 404)
-    #
-    # fresh = _clone_graph(original_graph)
-    # ACTIVE_GRAPHS[graph_id] = fresh
-    #
-    # workspace = WORKSPACES.get(graph_id)
-    # if workspace:
-    #     workspace.set_graph(fresh)
-    #
-    # return JsonResponse({"ok": True, "graph": fresh.to_dict()})
 
 
 @csrf_exempt
@@ -562,15 +578,16 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
             return _json_error(f"Failed to parse '{filename}' as {source_name}: {exc}", status=400)
 
         graph_id = str(uuid4())
-        ACTIVE_GRAPHS[graph_id] = graph
-        ORIGINAL_GRAPHS[graph_id] = graph
-        #ORIGINAL_GRAPHS[graph_id] = _clone_graph(graph)
+        original_graph = _clone_graph(graph)
+        active_graph = _clone_graph(graph)
+        ACTIVE_GRAPHS[graph_id] = active_graph
+        ORIGINAL_GRAPHS[graph_id] = original_graph
         workspace = Workspace()
-        workspace.set_graph(graph)
+        workspace.set_graph(active_graph)
         WORKSPACES[graph_id] = workspace
         _store_active_graph_id_in_session(request, graph_id)
 
-        graph_payload = graph.to_dict()
+        graph_payload = active_graph.to_dict()
         nodes = graph_payload.get("nodes", [])
         edges = graph_payload.get("edges", [])
         return JsonResponse(
