@@ -129,10 +129,16 @@ class Workspace:
     # -----------------
     # PREDEFINED NODE FILTERS / SEARCH
     # -----------------
+
+    # Searches for nodes whose label contains the given substring.
+    # This is a simple helper for partial label-based matching.
     def find_nodes_by_label(self, label_substr: str) -> List[Node]:
         """Return nodes whose label contains the given substring."""
         return self.filter_nodes(lambda n: label_substr.lower() in n.label.lower())
 
+
+    # Performs a general search over the current graph by checking node labels, IDs, and attributes.
+    # It returns all nodes that contain the query text and can optionally limit the search to a given set of node IDs.
     def find_nodes_by_query_contains(
         self, query: str, allowed_node_ids: Optional[set[str]] = None
     ) -> List[Node]:
@@ -272,6 +278,9 @@ class Workspace:
 
         raise ValueError(f"Unsupported attribute type for '{attribute}'")
 
+
+    # Filters nodes by comparing a selected attribute with a given value using the chosen operator.
+    # It first detects the attribute type, validates which operators are allowed for that type, and then returns all matching nodes.
     def find_nodes_by_attribute(self, attribute: str, operator: str, value):
         ops = {
             "==": lambda a, b: a == b,
@@ -335,6 +344,9 @@ class Workspace:
     # -----------------
     # PREDEFINED EDGE FILTERS / SEARCH
     # -----------------
+
+    # Returns edges whose weight falls within the provided minimum and maximum range.
+    # If one bound is missing, only the other bound is checked.
     def find_edges_by_weight(self, min_weight: float = None, max_weight: float = None) -> List[Edge]:
         """Return edges whose weight is within the given range."""
         def predicate(e: Edge):
@@ -345,6 +357,8 @@ class Workspace:
             return True
         return self.filter_edges(predicate)
 
+    # Finds all edges that have a specific attribute key with the expected value.
+    # This is a simple exact-match filter over edge attributes.
     def find_edges_by_attribute(self, key: str, value: str) -> List[Edge]:
         """Return edges where attribute[key] == value."""
         return self.filter_edges(lambda e: e.attributes.get(key) == value)

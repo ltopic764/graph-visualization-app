@@ -2,6 +2,9 @@ from .registry import PluginRegistry
 from .workspace import Workspace
 from api.graph_api.services import DataSourcePlugin, VisualizerPlugin
 
+# Central orchestration class responsible for coordinating graph loading,
+# visualization plugins and workspace operations.
+# It acts as a bridge between plugins and the internal workspace state.
 class GraphEngine:
     """
     High-level orchestration layer.
@@ -20,6 +23,8 @@ class GraphEngine:
     # MAIN ORCHESTRATION
     # ==========================================================
 
+    # Main processing method that loads a graph using a datasource plugin
+    # and then renders it using the selected visualizer plugin.
     def process(
         self,
         datasource_name: str,

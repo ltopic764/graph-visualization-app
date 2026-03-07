@@ -339,6 +339,9 @@ def _parse_properties(tokens: list[str]) -> dict:
             i += 1
     return props
 
+
+# Converts a graph object into a JSON-friendly dictionary with node and edge lists.
+# This format is used when sending the current graph state back to the frontend.
 def _graph_to_payload(graph: Graph) -> dict:
     return {
         "nodes": [n.to_dict() for n in graph.nodes],
@@ -346,6 +349,8 @@ def _graph_to_payload(graph: Graph) -> dict:
     }
 
 
+# Restores the graph to its original loaded state using the stored graph ID.
+# It also updates the active workspace so the reset graph becomes the current working graph again.
 def _reset_graph_state(graph_id: str) -> Graph:
     original_graph = ORIGINAL_GRAPHS.get(graph_id)
     if not original_graph:
@@ -363,6 +368,9 @@ def _reset_graph_state(graph_id: str) -> Graph:
     workspace.set_graph(fresh_graph)
     return fresh_graph
 
+
+# Replaces the current graph with an empty graph and updates both active and original graph storage.
+# This is used by the CLI clear command to completely remove the graph from the canvas.
 def _clear_graph_state(graph_id: str) -> Graph:
     workspace = WORKSPACES.get(graph_id)
 
@@ -388,6 +396,8 @@ def _clear_graph_state(graph_id: str) -> Graph:
     return empty_graph
 
 
+# Applies a search query to the current graph in the workspace and keeps only matching nodes.
+# It supports both exact attribute searches such as Name=Tom and general text-based searches.
 def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) -> Graph:
     current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
     if current_graph is None:
@@ -398,7 +408,6 @@ def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) 
 
     query = query.strip()
 
-    # Ako je query oblika Name=Tom, tretiraj kao precizan atributski search
     if "=" in query and "==" not in query and "!=" not in query and ">=" not in query and "<=" not in query:
         attribute, value = query.split("=", 1)
         matched_nodes = workspace.find_nodes_by_attribute(attribute.strip(), "==", value.strip())
@@ -413,6 +422,8 @@ def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) 
     return filtered_graph
 
 
+# Parses one filter condition and separates it into attribute, operator, and value parts.
+# It also normalizes a single '=' operator into '==' so filtering uses a consistent comparison format.
 def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
     condition = condition.strip()
 
@@ -430,6 +441,8 @@ def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
     return attribute, operator, value
 
 
+# Applies a full filter expression to the current graph by processing all conditions one by one.
+# Each condition narrows the graph further, which allows chained filtering with expressions joined by &&.
 def _apply_filter_expression_to_workspace(graph_id: str, workspace: Workspace, expression: str) -> Graph:
     current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
     if current_graph is None:
@@ -660,6 +673,9 @@ def _execute_edge_command(workspace: Workspace, tokens: list[str]) -> str:
 
     raise ValueError(f"Unknown action '{action}' for edge. Use create/edit/delete.")
 
+
+# Handles search requests for a specific graph and returns only the matching part of the graph.
+# It updates the active workspace graph so later operations continue from the current search result.
 @csrf_exempt
 def graph_search_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
@@ -711,6 +727,8 @@ def graph_search_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True, "matched_ids": list(matched_ids), "graph": subgraph})
 
 
+# Handles filter requests by applying one attribute-based condition to the current graph.
+# The result is stored as the new active graph so filtering can continue on the already reduced graph.
 @csrf_exempt
 def graph_filter_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)
@@ -768,6 +786,8 @@ def graph_filter_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True, "graph": subgraph})
 
 
+# Restores the workspace graph to the original loaded version using the stored graph ID.
+# This endpoint is used when the user wants to remove search or filter effects and start again from the initial graph.
 @csrf_exempt
 def workspace_reset_api(request: HttpRequest) -> JsonResponse:
     method_error = _require_post_json(request)

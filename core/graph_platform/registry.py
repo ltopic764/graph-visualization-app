@@ -3,7 +3,8 @@ from api.graph_api.services import DataSourcePlugin
 from api.graph_api.services import VisualizerPlugin
 from typing import Dict, Type
 
-
+# Registry responsible for discovering and storing available datasource and visualizer plugins.
+# It loads plugins via Python entry points so they can be dynamically added without modifying the core system.
 class PluginRegistry:
     DATASOURCE_ENTRYPOINT_GROUP = "graph_platform.datasource"
     VISUALIZER_ENTRYPOINT_GROUP = "graph_platform.visualizer"
@@ -13,6 +14,8 @@ class PluginRegistry:
     _datasources: Dict[str, Type[DataSourcePlugin]]
     _visualizers: Dict[str, Type[VisualizerPlugin]]
 
+    # Ensures that PluginRegistry behaves as a singleton so plugins are loaded only once.
+    # When the first instance is created, it initializes plugin storage and loads available plugins.
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -21,6 +24,8 @@ class PluginRegistry:
             cls._instance._load_plugins()
         return cls._instance
 
+    # Discovers plugins defined through Python entry points and stores them in internal dictionaries.
+    # Datasource and visualizer plugins are grouped separately based on their entry-point group name.
     def _load_plugins(self):
         eps = entry_points()
 
