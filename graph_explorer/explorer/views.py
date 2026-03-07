@@ -1,6 +1,5 @@
 import os
 import shlex
-import time
 import json
 import logging
 import datetime
@@ -19,7 +18,6 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core.graph_platform.registry import PluginRegistry
 from core.graph_platform.workspace import Workspace
-#from test_search_filter import workspace
 
 WORKSPACES = {}
 
@@ -60,6 +58,7 @@ SUPPORTED_VISUALIZERS = {"simple", "block"}
 
 
 def _json_error(message: str, status: int) -> JsonResponse:
+    # Return a compact JSON error payload used by legacy endpoints.
     return JsonResponse({"ok": False, "error": message}, status=status)
 
 
@@ -70,6 +69,7 @@ def json_error(
     expected: dict[str, object] | None = None,
     details: object | None = None,
 ) -> JsonResponse:
+    # Return a structured JSON error payload for API validation failures.
     payload: dict[str, object] = {
         "ok": False,
         "status": status_code,
@@ -84,6 +84,7 @@ def json_error(
 
 
 def _parse_json_body(request: HttpRequest) -> tuple[object | None, JsonResponse | None]:
+    # Decode and parse a JSON request body, returning a response on parse errors.
     if not request.body:
         return None, json_error(400, "BadRequest", "Invalid JSON body.")
 
@@ -95,6 +96,7 @@ def _parse_json_body(request: HttpRequest) -> tuple[object | None, JsonResponse 
 
 
 def _require_post_json(request: HttpRequest) -> JsonResponse | None:
+    # Enforce POST-only access for JSON endpoints.
     if request.method != "POST":
         return json_error(
             405,
@@ -106,13 +108,14 @@ def _require_post_json(request: HttpRequest) -> JsonResponse | None:
 
 
 def _format_available_plugins(plugin_names: list[str]) -> str:
+    # Format discovered plugin names for user-facing error messages.
     if not plugin_names:
         return " (no plugins discovered via registry)"
     return f" (available: {', '.join(sorted(plugin_names))})"
 
 
 def _build_datasource_plugin_payloads() -> list[dict[str, object]]:
-    # Build datasource plugin options directly from registry discovery.
+    # Build datasource options from discovered plugins and known extensions.
     registry = PluginRegistry()
     payloads: list[dict[str, object]] = []
     for datasource_name in sorted(registry.list_datasources()):
@@ -138,7 +141,7 @@ def _build_datasource_plugin_payloads() -> list[dict[str, object]]:
 
 
 def _validate_datasource_file_match(datasource_name: str, extension: str) -> str | None:
-    # Reject obvious extension mismatches for known datasource plugins.
+    # Validate that selected datasource plugin matches the uploaded file extension.
     if not extension:
         return None
 
@@ -157,6 +160,7 @@ def _validate_datasource_file_match(datasource_name: str, extension: str) -> str
 
 
 def _load_graph_from_upload(uploaded_file: UploadedFile, suffix: str, datasource_cls: object) -> Graph:
+    # Persist upload to a temporary file and load it through the datasource plugin.
     temp_path: str | None = None
     try:
         with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
@@ -175,6 +179,7 @@ def _load_graph_from_upload(uploaded_file: UploadedFile, suffix: str, datasource
 
 
 def _store_active_graph_id_in_session(request: HttpRequest, graph_id: str) -> None:
+    # Best-effort persistence of the active graph id in the current session.
     try:
         request.session["active_graph_id"] = graph_id
         request.session.save()
@@ -187,6 +192,7 @@ def _store_active_graph_id_in_session(request: HttpRequest, graph_id: str) -> No
 
 
 def index(request: HttpRequest) -> HttpResponse:
+    # Render the Graph Explorer page shell.
     context = {
         "page_title": "Graph Explorer",
     }
@@ -194,11 +200,13 @@ def index(request: HttpRequest) -> HttpResponse:
 
 
 def mock_graph_api(request: HttpRequest) -> JsonResponse:
+    # Return a static graph payload kept for manual smoke checks.
     return JsonResponse(MOCK_GRAPH_DATA)
 
 
 @require_GET
 def datasource_plugins_api(request: HttpRequest) -> JsonResponse:
+    # Return datasource plugins available through the plugin registry.
     return JsonResponse(
         {
             "ok": True,
@@ -208,22 +216,20 @@ def datasource_plugins_api(request: HttpRequest) -> JsonResponse:
 
 
 def _parse_flag(tokens: list[str], name: str) -> str | None:
-    # Looking for --id=123
-    for i, t in enumerate(tokens):
-        if t.startswith(name + "="):
-            return t.split("=", 1)[1]
-        if t == name and i + 1 < len(tokens):
+    # Extract a CLI flag value from either '--flag=value' or '--flag value'.
+    for i, token in enumerate(tokens):
+        if token.startswith(name + "="):
+            return token.split("=", 1)[1]
+        if token == name and i + 1 < len(tokens):
             return tokens[i + 1]
     return None
 
 def _clone_graph(graph: Graph) -> Graph:
-    # Create a DEEPCOPY of the original graph
+    # Deep-clone nodes and edges so workspace mutations do not touch the original graph.
     g2 = Graph(directed=getattr(graph, "directed", True))
-    # Clone nodes
     for n in graph.nodes:
         g2.add_node(Node(node_id=str(n.node_id), label=getattr(n, "label", "") or str(n.node_id),
                          attributes=deepcopy(getattr(n, "attributes", {}) or {})))
-    # Clone edges
     for e in graph.edges:
         g2.add_edge(Edge(source=str(e.source), target=str(e.target),
                          edge_id=getattr(e, "edge_id", None),
@@ -234,6 +240,7 @@ def _clone_graph(graph: Graph) -> Graph:
 
 
 def _build_subgraph(graph: Graph, node_ids: set[str]) -> Graph:
+    # Create a graph containing only nodes in node_ids and edges between those nodes.
     if Graph is None or Node is None or Edge is None:
         raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
 
@@ -268,6 +275,7 @@ def _build_subgraph(graph: Graph, node_ids: set[str]) -> Graph:
 
 
 def _to_json_safe_value(value):
+    # Convert nested attribute values into JSON-serializable primitives.
     if isinstance(value, datetime.datetime):
         return value.isoformat()
     if isinstance(value, datetime.date):
@@ -287,6 +295,7 @@ def _to_json_safe_value(value):
 
 
 def _build_visualizer_graph(graph: Graph, is_directed: bool) -> Graph:
+    # Build a sanitized graph copy used only for visualizer rendering.
     if Graph is None or Node is None or Edge is None:
         raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
 
@@ -321,8 +330,8 @@ def _build_visualizer_graph(graph: Graph, is_directed: bool) -> Graph:
 
     return render_graph
 
-# Parse sent properties
 def _parse_properties(tokens: list[str]) -> dict:
+    # Parse repeated '--property key=value' arguments into a single dictionary.
     props = {}
     i = 0
     while i < len(tokens):
@@ -340,38 +349,16 @@ def _parse_properties(tokens: list[str]) -> dict:
     return props
 
 
-# Converts a graph object into a JSON-friendly dictionary with node and edge lists.
-# This format is used when sending the current graph state back to the frontend.
 def _graph_to_payload(graph: Graph) -> dict:
+    # Serialize graph nodes and edges for API responses.
     return {
         "nodes": [n.to_dict() for n in graph.nodes],
         "edges": [e.to_dict() for e in graph.edges],
     }
 
 
-# Restores the graph to its original loaded state using the stored graph ID.
-# It also updates the active workspace so the reset graph becomes the current working graph again.
-def _reset_graph_state(graph_id: str) -> Graph:
-    original_graph = ORIGINAL_GRAPHS.get(graph_id)
-    if not original_graph:
-        raise ValueError("Graph not found")
-
-    fresh_graph = _clone_graph(original_graph)
-    ACTIVE_GRAPHS[graph_id] = fresh_graph
-
-    workspace = WORKSPACES.get(graph_id)
-    if workspace is None:
-        workspace = Workspace()
-        WORKSPACES[graph_id] = workspace
-
-    workspace.clear()
-    workspace.set_graph(fresh_graph)
-    return fresh_graph
-
-
-# Replaces the current graph with an empty graph and updates both active and original graph storage.
-# This is used by the CLI clear command to completely remove the graph from the canvas.
 def _clear_graph_state(graph_id: str) -> Graph:
+    # Replace the active/original graph state with an empty graph for clear commands.
     workspace = WORKSPACES.get(graph_id)
 
     if workspace is None:
@@ -396,9 +383,8 @@ def _clear_graph_state(graph_id: str) -> Graph:
     return empty_graph
 
 
-# Applies a search query to the current graph in the workspace and keeps only matching nodes.
-# It supports both exact attribute searches such as Name=Tom and general text-based searches.
 def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) -> Graph:
+    # Apply a search query and store the matched subgraph as the active graph.
     current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
     if current_graph is None:
         raise ValueError("Graph not found")
@@ -422,9 +408,8 @@ def _apply_search_to_workspace(graph_id: str, workspace: Workspace, query: str) 
     return filtered_graph
 
 
-# Parses one filter condition and separates it into attribute, operator, and value parts.
-# It also normalizes a single '=' operator into '==' so filtering uses a consistent comparison format.
 def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
+    # Parse one filter condition into (attribute, operator, value).
     condition = condition.strip()
 
     match = re.match(r"^(.+?)(==|!=|>=|<=|>|<|=)(.+)$", condition)
@@ -441,9 +426,8 @@ def _parse_filter_condition(condition: str) -> tuple[str, str, str]:
     return attribute, operator, value
 
 
-# Applies a full filter expression to the current graph by processing all conditions one by one.
-# Each condition narrows the graph further, which allows chained filtering with expressions joined by &&.
 def _apply_filter_expression_to_workspace(graph_id: str, workspace: Workspace, expression: str) -> Graph:
+    # Apply '&&'-joined filter conditions and keep narrowing the active graph.
     current_graph = ACTIVE_GRAPHS.get(graph_id) or workspace.get_graph() or ORIGINAL_GRAPHS.get(graph_id)
     if current_graph is None:
         raise ValueError("Graph not found")
@@ -471,6 +455,7 @@ def _apply_filter_expression_to_workspace(graph_id: str, workspace: Workspace, e
 
 @csrf_exempt
 def cli_execute_api(request: HttpRequest) -> JsonResponse:
+    # Execute graph console commands and return the updated graph state.
     method_error = _require_post_json(request)
     if method_error:
         return method_error
@@ -496,7 +481,6 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
         action = tokens[0].lower()
 
-        # SEARCH
         if action == "search":
             if len(tokens) < 2:
                 raise ValueError("Invalid search command. Use: search 'Name=Tom'")
@@ -510,7 +494,6 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
                 "graph": _graph_to_payload(updated_graph)
             }, status=200)
 
-        # FILTER
         if action == "filter":
             if len(tokens) < 2:
                 raise ValueError("Invalid filter command. Use: filter 'Age>30 && Height>=150'")
@@ -524,8 +507,6 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
                 "graph": _graph_to_payload(updated_graph)
             }, status=200)
 
-        # CLEAR / CLEAR GRAPH
-        
         if action == "clear":
             if len(tokens) == 1 or (len(tokens) == 2 and tokens[1].lower() == "graph"):
                 cleared_graph = _clear_graph_state(graph_id)
@@ -538,17 +519,10 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
             raise ValueError("Invalid clear command. Use: clear or clear graph")
 
-        # Existing NODE / EDGE commands
-        # create/edit/delete node/edge ...
-
         if len(tokens) < 2:
             raise ValueError("Invalid command. format: [action] [subject] --flags")
 
         subject = tokens[1].lower()
-        obj_id = _parse_flag(tokens, "--id")
-        props = _parse_properties(tokens)
-
-        # Command delegation by subject
         if subject == "node":
             msg = _execute_node_command(workspace, tokens)
         elif subject == "edge":
@@ -570,25 +544,15 @@ def cli_execute_api(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         return JsonResponse({"ok": False, "message": f"ERROR: {str(exc)}"}, status=400)
-    
-def _build_empty_graph_like(graph: Graph | None = None) -> Graph:
-    if Graph is None:
-        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
-
-    is_directed = True
-    if graph is not None:
-        is_directed = getattr(graph, "directed", True)
-
-    return Graph(directed=is_directed)
 
 
 def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
-    # Execute only command for node objects
+    # Handle create/edit/delete node commands from the console API.
     if len(tokens) < 2:
         raise ValueError("Invalid command. Use: create/edit/delete node ...")
 
-    action = tokens[0].lower() # create/edit/delete
-    subject = tokens[1].lower() # node
+    action = tokens[0].lower()
+    subject = tokens[1].lower()
 
     if subject != "node":
         raise ValueError("Only node commands are supported here")
@@ -598,8 +562,6 @@ def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
         raise ValueError("Missing --id from node command")
 
     props = _parse_properties(tokens)
-
-    # Actions
 
     if action == "create":
         workspace.create_node(node_id=node_id, properties=props)
@@ -617,7 +579,7 @@ def _execute_node_command(workspace: Workspace, tokens: list[str]) -> str:
 
 
 def _execute_edge_command(workspace: Workspace, tokens: list[str]) -> str:
-    """Execute command for edge objects: [action] edge --id --source --target --props"""
+    # Handle create/edit/delete edge commands from the console API.
     if len(tokens) < 2:
         raise ValueError("Invalid command format. Use: [action] edge --flags")
 
@@ -627,18 +589,14 @@ def _execute_edge_command(workspace: Workspace, tokens: list[str]) -> str:
     if subject != "edge":
         raise ValueError("Only edge commands are supported here")
 
-    # Flag extraction
     edge_id = _parse_flag(tokens, "--id")
     props = _parse_properties(tokens)
-
-
     graph = workspace.get_graph()
 
     if action == "create":
         if not edge_id:
             raise ValueError("Edge creation requires --id")
 
-        # Check if id already exists
         if any(e.get('id') == edge_id for e in graph.to_dict().get('edges', [])):
             raise ValueError(f"Edge with id '{edge_id}' already exists.")
 
@@ -674,10 +632,9 @@ def _execute_edge_command(workspace: Workspace, tokens: list[str]) -> str:
     raise ValueError(f"Unknown action '{action}' for edge. Use create/edit/delete.")
 
 
-# Handles search requests for a specific graph and returns only the matching part of the graph.
-# It updates the active workspace graph so later operations continue from the current search result.
 @csrf_exempt
 def graph_search_api(request: HttpRequest) -> JsonResponse:
+    # Search nodes in the current graph and persist the matched subgraph as active.
     method_error = _require_post_json(request)
     if method_error:
         return method_error
@@ -727,10 +684,9 @@ def graph_search_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True, "matched_ids": list(matched_ids), "graph": subgraph})
 
 
-# Handles filter requests by applying one attribute-based condition to the current graph.
-# The result is stored as the new active graph so filtering can continue on the already reduced graph.
 @csrf_exempt
 def graph_filter_api(request: HttpRequest) -> JsonResponse:
+    # Filter nodes by one attribute condition and store the filtered subgraph.
     method_error = _require_post_json(request)
     if method_error:
         return method_error
@@ -786,10 +742,9 @@ def graph_filter_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True, "graph": subgraph})
 
 
-# Restores the workspace graph to the original loaded version using the stored graph ID.
-# This endpoint is used when the user wants to remove search or filter effects and start again from the initial graph.
 @csrf_exempt
 def workspace_reset_api(request: HttpRequest) -> JsonResponse:
+    # Reset the workspace and active graph back to the originally loaded graph.
     method_error = _require_post_json(request)
     if method_error:
         return method_error
@@ -825,6 +780,7 @@ def workspace_reset_api(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def load_graph_api(request: HttpRequest) -> JsonResponse:
+    # Load an uploaded graph via datasource plugin and initialize workspace state.
     uploaded_file = request.FILES.get("file")
     if uploaded_file is None:
         return _json_error("missing file", status=400)
@@ -884,6 +840,7 @@ def load_graph_api(request: HttpRequest) -> JsonResponse:
 
 
 def _html_response(title: str, message: str, status: int = 200) -> HttpResponse:
+    # Return a minimal HTML error page for iframe-based visualizer requests.
     page = [
         "<!doctype html>",
         "<html lang=\"en\">",
@@ -898,6 +855,7 @@ def _html_response(title: str, message: str, status: int = 200) -> HttpResponse:
 
 
 def _parse_directed_flag(request: HttpRequest) -> bool:
+    # Parse directed/is_directed query flags with a default of True.
     raw_value = request.GET.get("directed")
     if raw_value is None:
         raw_value = request.GET.get("is_directed")
@@ -914,39 +872,8 @@ def _parse_directed_flag(request: HttpRequest) -> bool:
     raise ValueError("Invalid directed flag. Use directed=1 or directed=0.")
 
 
-def _build_mock_graph(is_directed: bool) -> Graph:
-    if Graph is None or Node is None or Edge is None:
-        raise RuntimeError(f"Graph API classes are not importable: {GRAPH_IMPORT_ERROR}")
-
-    graph = Graph(directed=is_directed)
-
-    for node_data in MOCK_GRAPH_DATA.get("nodes", []):
-        raw_id = node_data.get("id")
-        node_id = str(raw_id) if raw_id is not None else ""
-        label = str(node_data.get("label") or node_id)
-        attributes = {key: value for key, value in node_data.items() if key not in {"id", "label"}}
-        graph.add_node(Node(node_id=node_id, label=label, attributes=attributes))
-
-    for edge_data in MOCK_GRAPH_DATA.get("edges", []):
-        source = str(edge_data.get("source", ""))
-        target = str(edge_data.get("target", ""))
-        raw_edge_id = edge_data.get("id")
-        edge_id = str(raw_edge_id) if raw_edge_id is not None else None
-        attributes = {key: value for key, value in edge_data.items() if key not in {"id", "source", "target"}}
-        graph.add_edge(
-            Edge(
-                source=source,
-                target=target,
-                edge_id=edge_id,
-                directed=is_directed,
-                attributes=attributes,
-            )
-        )
-
-    return graph
-
-
 def _build_visualizer_map() -> dict[str, object | None]:
+    # Instantiate supported visualizers from the plugin registry when available.
     registry = PluginRegistry()
     visualizers: dict[str, object | None] = {}
     for visualizer_name in SUPPORTED_VISUALIZERS:
@@ -957,6 +884,7 @@ def _build_visualizer_map() -> dict[str, object | None]:
 
 @require_GET
 def render_visualizer_api(request: HttpRequest) -> HttpResponse:
+    # Render the active graph with the selected visualizer and return HTML.
     visualizer_id = request.GET.get("visualizer_id", "").strip().lower()
     if not visualizer_id:
         return _html_response(

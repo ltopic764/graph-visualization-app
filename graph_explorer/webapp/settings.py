@@ -14,7 +14,6 @@ for extra_path in (
 ):
     extra_path_str = str(extra_path)
     if extra_path_str not in sys.path:
-        # TODO: switch to finalized plugin/package loading strategy when registry wiring is complete.
         sys.path.insert(0, extra_path_str)
 
 SECRET_KEY = "django-insecure-graph-explorer-placeholder-key"
